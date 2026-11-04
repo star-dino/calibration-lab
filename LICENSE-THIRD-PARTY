@@ -1,0 +1,151 @@
+================================================================================
+Upstream & Third-Party Licenses
+================================================================================
+
+Portions of this project are derived from, or adapted from, the following
+MIT-licensed open-source projects. Their full license texts are reproduced
+below as required by the MIT License ("The above copyright notice and this
+permission notice shall be included in all copies or substantial portions of
+the Software.").
+
+Adapted code (in `showcase/`, which lived in the parent repository `stardino-stylehop`
+and is not part of this repository) included:
+  - `showcase/corelib/audio_dsp.py` — Foley primitives ported from lemo-opuscar/core/audio/sfx.py
+    (`quick_click`, `quick_thump`, `quick_whoosh`).
+  - `showcase/worlds/*/audio_*.py` — synthesis recipes and filter/easing helpers derived
+    from lemo-opuscar style demos, and a loudness/sidechain master chain mirroring
+    earshot's `master.py` API.
+
+The upstream projects themselves are NOT redistributed in this repository, and
+no file in it imports them or reads `LEMO_OPUSCAR_ROOT` / `EARSHOT_ROOT`; the
+notices are kept because code and recipes adapted from them existed in the
+parent repository this one was split from.
+
+`styles/calibration-lab/sample/kit-compat/` is the teardown kit API ported onto
+the bundled Three.js r147 build (see CREDITS §D); the teardown MIT notice is
+reproduced in section 3 below.
+
+Recorded audio (VCSL / VSCO-2-CE instrument samples; optional Sonniss import) is
+CC0 1.0 or EULA-bound as noted, is not part of this repository, and is downloaded
+on demand; see SOUND_CREDITS.md.
+
+--------------------------------------------------------------------------------
+1. lemo-opuscar — https://github.com/lemomo-ai/lemo-opuscar
+--------------------------------------------------------------------------------
+
+MIT License
+
+Copyright (c) 2026 LemoLab
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------------
+2. earshot — https://github.com/Leonxlnx/earshot
+--------------------------------------------------------------------------------
+
+MIT License
+
+Copyright (c) 2026 Leon Lin
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Third-Party Sample Libraries (referenced, not redistributed)
+================================================================================
+
+See CREDITS.md. Audio rendered by this project's scripts may incorporate CC BY
+licensed instrument samples (Salamander Grand Piano V3, CC BY 3.0; MuldjordKit,
+CC BY 4.0). Those obligations attach to rendered audio, not to this source tree.
+
+--------------------------------------------------------------------------------
+3. teardown (Claude skill) — method borrowed (ADR-021); MIT
+--------------------------------------------------------------------------------
+
+MIT License
+
+Copyright (c) 2026 elvarofficial
+Copyright (c) 2026 whaleyxbt
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------------
+Recorded sample sources (tools/samples.py)
+--------------------------------------------------------------------------------
+
+No audio file is redistributed in this repository. `tools/samples.manifest.json`
+carries the URL, sha256 and licence of every file; `python3 tools/samples.py fetch`
+downloads and indexes them into `../out/samples-cache/` at build time. Styles opt in
+with a `samples.json` map; without the cache the score falls back to synthesis.
+
+VCSL — Versilian Community Sample Library
+  Licence: CC0 1.0 Universal (public domain dedication)
+  Source:  https://github.com/sgossner/VCSL
+  Files:   Idiophones/Struck Idiophones/Ratchet/Ratchet1_Crank_rr1_Mid.wav
+           Idiophones/Struck Idiophones/Ratchet/Ratchet1_Slow_rr1_Mid.wav
+           Idiophones/Struck Idiophones/Anvil/Anvil_Hit1_v1_rr1_Mid.wav
+           Idiophones/Struck Idiophones/Brake Drum/BrakeDrum1_Hammer_v1_rr1_Mid.wav
+           Idiophones/Struck Idiophones/Claves/Claves1_Hit_v1_rr1_Mid.wav
+           Idiophones/Struck Idiophones/Slapstick/slapstick_rr1.wav
+
+VSCO 2 Community Edition
+  Licence: CC0 1.0 Universal (public domain dedication)
+  Source:  https://github.com/sgossner/VSCO-2-CE
+  Files:   Strings/Cello Section/susvib/susvib_B3_v1_1.wav
+           Brass/Trumpet/sus/Sum_SHTrumpet_sus_A2_v3_rr1.wav
+
+Sonniss #GameAudioGDC Bundle (optional, manual import only)
+  Licence: Sonniss GDC Bundle EULA v2.0 — worldwide, non-exclusive, royalty-free,
+           commercial use allowed, no attribution required; the files may not be
+           redistributed as sound effects; use for AI training is expressly forbidden.
+  Source:  https://sonniss.com/gdc-bundle-license/  ·  https://gdc.sonniss.com/
+  This repository neither downloads nor ships these files. `tools/samples.py import
+  --pack sonniss-gdc --src <folder>` only indexes a copy the user downloaded
+  themselves, and it stays in `../out/samples-cache/`.

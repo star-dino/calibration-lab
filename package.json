@@ -1,0 +1,21 @@
+{
+  "name": "stardino-calibration-lab",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Calibration Lab (计量实验室): a standalone HTML-in-Canvas 3D mechanical cutaway style with deterministic rendering, machine-feel gates and a diegetic procedural score.",
+  "scripts": {
+    "init": "python3 tools/samples.py fetch",
+    "serve": "node engine/serve.mjs",
+    "audit": "node tools/audit.mjs",
+    "render": "node tools/render.mjs",
+    "textures": "python3 tools/textures.py",
+    "samples": "python3 tools/samples.py",
+    "sound": "python3 tools/sound.py",
+    "voice": "python3 tools/voice.py"
+  },
+  "dependencies": {
+    "playwright-core": "^1.63.0"
+  },
+  "license": "MIT"
+}
