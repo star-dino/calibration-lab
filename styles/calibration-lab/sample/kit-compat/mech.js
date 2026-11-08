@@ -6,7 +6,7 @@
 //
 // Nothing here is specific to one machine: no names, no palette, no model constants. Every colour comes in as a
 // material, every size as an argument. What it encodes is the machine feel found in a build whose form was wrong but
-// which read as hardware at first glance: every seam carried a sunk groove, a liner and clasps; a hub was seven
+// which read as hardware at first glance: every seam carried a sunk groove and a liner; a hub was seven
 // lugged rings turning against each other; the cutaway showed rows of vanes at an exact pitch; the metals were
 // metals. Units are the caller's (the defaults suit a model a few metres across).
 import {THREE} from '/styles/calibration-lab/kernel.js';
@@ -235,15 +235,10 @@ export function ridgeLine(geometry, {along, up = new V3(0, 0, 1), bins = 18, tri
 }
 
 /**
- * Hardware along a seam, so it reads as a joint and not a drawn line: a liner (tube sunk into the gap) and clasps
- * bridging the gap at a fixed pitch, alternating two materials. `points`/`normals` from ridgeLine() or your own
- * curve; `normals` point out of the surface. `surfaces` (meshes, e.g. the two plates either side) seats every clasp
- * on them: a ray each side of the gap, the clasp at the mean of the two hits, dropped when either side misses or the
- * hits disagree (the plate turns away there, or a window cut it). Without it a clasp sits on the groove's ridge,
- * which floats wherever the groove stands proud of the plates. `space` is the object the group will be added to
- * (its matrixWorld converts the hits); omit it when everything is at identity.
+ * Hardware along a seam, so it reads as a joint and not a drawn line: a liner tube sunk into the seam groove.
+ * `points`/`normals` come from ridgeLine() or your own curve; `normals` point out of the surface.
  */
-export function seamHardware({points, normals, linerMat, linerR = 0.035, sink = 0.02, claspMat, claspAlt, pitch = 0.6, clasp = [0.07, 0.05, 0.2], skipEnds = 0.08, surfaces = null, space = null}) {
+export function seamHardware({points, normals, linerMat, linerR = 0.035, sink = 0.02}) {
   const grp = new THREE.Group();
   if (points.length < 2) return grp;
   const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
@@ -255,59 +250,6 @@ export function seamHardware({points, normals, linerMat, linerR = 0.035, sink = 
       return q.clone().addScaledVector(n, -sink);
     });
     grp.add(new THREE.Mesh(swept({points: pts, radiusAt: linerR, tubularSeg: pts.length * 2, radialSeg: 8}), linerMat));
-  }
-  if (claspMat) {
-    const count = Math.max(1, Math.floor((len * (1 - 2 * skipEnds)) / pitch));
-    const box = new THREE.BoxGeometry(...clasp);
-    const T = new V3();
-    const B = new V3();
-    const m = new THREE.Matrix4();
-    const ray = surfaces ? new THREE.Raycaster() : null;
-    const inv = space ? new THREE.Matrix4().copy(space.matrixWorld).invert() : null;
-    const toWorld = (v) => (space ? v.clone().applyMatrix4(space.matrixWorld) : v.clone());
-    const seat = (q, n) => {
-      const hits = [];
-      for (const side of [-1, 1]) {
-        const o = q.clone().addScaledVector(B, side * clasp[2] * 0.42).addScaledVector(n, 0.6);
-        const ow = toWorld(o);
-        const dw = toWorld(o.clone().sub(n)).sub(ow).normalize();
-        ray.set(ow, dw);
-        ray.far = 1.2;
-        const h = ray.intersectObjects(surfaces, false)[0];
-        if (!h || !h.face) return null;
-        hits.push(inv ? h.point.clone().applyMatrix4(inv) : h.point.clone());
-        // the face normal, into the group's space: clasps lie on the plates, not on the groove's ridge
-        const fn = h.face.normal.clone().transformDirection(h.object.matrixWorld);
-        if (inv) fn.transformDirection(inv);
-        if (fn.dot(n) < 0) fn.negate();
-        seatN.add(fn);
-      }
-      if (hits[0].distanceTo(hits[1]) > clasp[2] * 1.6) return null;
-      const mid = hits[0].add(hits[1]).multiplyScalar(0.5);
-      return mid.distanceTo(q) < 0.35 ? mid : null;
-    };
-    const seatN = new V3();
-    for (let k = 0; k <= count; k++) {
-      const u = skipEnds + ((1 - 2 * skipEnds) * k) / Math.max(1, count);
-      let q = curve.getPointAt(u);
-      curve.getTangentAt(u, T).normalize();
-      let n = nCurve.getPoint(u).normalize();
-      B.crossVectors(T, n).normalize();
-      if (ray) {
-        seatN.set(0, 0, 0);
-        q = seat(q, n);
-        if (!q) continue;
-        n = seatN.normalize();
-        T.addScaledVector(n, -T.dot(n)).normalize(); // keep x along the seam, in the plate's plane
-        B.crossVectors(T, n).normalize();
-      }
-      const mesh = new THREE.Mesh(box, k % 3 === 2 && claspAlt ? claspAlt : claspMat);
-      // x along the seam, y out of the surface, z across the gap
-      m.makeBasis(T, n, B);
-      mesh.quaternion.setFromRotationMatrix(m);
-      mesh.position.copy(q).addScaledVector(n, clasp[1] * 0.2);
-      grp.add(mesh);
-    }
   }
   return grp;
 }

@@ -392,9 +392,13 @@ def overlay_samples(stereo: np.ndarray, cue_data: dict, sample_map_path: str) ->
     if not map_path.is_file():
         return stereo, []
     cfg = _json.loads(map_path.read_text(encoding="utf-8"))
-    index_path = _Path(cfg.get("index", "../../../out/samples-cache/index.json"))
+    index_path = _Path(cfg.get("index", "../../.cache/samples/index.json"))
     if not index_path.is_absolute():
         index_path = (map_path.parent / index_path).resolve()
+    if not index_path.is_file():
+        alt = (map_path.parent / "../../../out/samples-cache/index.json").resolve()
+        if alt.is_file():
+            index_path = alt
     if not index_path.is_file():
         print(f"[sound] samples: no index at {index_path}; falling back to synthesis", file=sys.stderr)
         return stereo, []
@@ -1255,9 +1259,13 @@ def main():
     if args.samples:
         try:
             _map = json.loads(Path(args.samples).read_text(encoding="utf-8"))
-            _idx_path = Path(_map.get("index", "../../../out/samples-cache/index.json"))
+            _idx_path = Path(_map.get("index", "../../.cache/samples/index.json"))
             if not _idx_path.is_absolute():
                 _idx_path = (Path(args.samples).resolve().parent / _idx_path).resolve()
+            if not _idx_path.is_file():
+                _alt = (Path(args.samples).resolve().parent / "../../../out/samples-cache/index.json").resolve()
+                if _alt.is_file():
+                    _idx_path = _alt
             if _idx_path.is_file():
                 _idx = json.loads(_idx_path.read_text(encoding="utf-8"))
                 _cache = Path(_idx.get("cache", _idx_path.parent))

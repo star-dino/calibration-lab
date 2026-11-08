@@ -752,6 +752,7 @@ export function ribbedLinkGeometry({
   thickness = 16,
   webThickness = 5.5,
   bevel = 0.9,
+  uvScale,
 } = {}) {
   const halfL = length / 2;
   const sh = new THREE.Shape();
@@ -796,16 +797,17 @@ export function ribbedLinkGeometry({
     rim.holes.push(hSmall);
   }
 
-  const slotBottom = yBig + rBig + 4;
-  const slotTop = ySmall - rSmall - 4;
+  const u = Math.min(1, thickness / 16);
+  const slotBottom = yBig + rBig + 4 * u;
+  const slotTop = ySmall - rSmall - 4 * u;
   const slotH = slotTop - slotBottom;
-  const slotW = Math.max(3, (w0 + w1) - 7);
-  if (slotH > 8 && slotW > 3) {
+  const slotW = Math.max(3 * u, (w0 + w1) - 7 * u);
+  if (slotH > 8 * u && slotW > 3 * u) {
     const pocket = new THREE.Path();
     const cy = (slotBottom + slotTop) / 2;
     const hw = slotW / 2;
     const hh = slotH / 2;
-    const pr = Math.min(hw * 0.85, 4);
+    const pr = Math.min(hw * 0.85, 4 * u);
     pocket.moveTo(-hw + pr, cy - hh);
     pocket.lineTo(hw - pr, cy - hh);
     pocket.quadraticCurveTo(hw, cy - hh, hw, cy - hh + pr);
@@ -826,17 +828,21 @@ export function ribbedLinkGeometry({
   });
   webGeo.translate(0, 0, -webThickness / 2);
 
+  const rimDepth = Math.max(1 * u, thickness - bevel * 2);
   const rimGeo = new THREE.ExtrudeGeometry(rim, {
-    depth: Math.max(1, thickness - bevel * 2),
+    depth: rimDepth,
     bevelEnabled: true,
     bevelThickness: bevel,
     bevelSize: bevel,
     bevelSegments: 2,
     curveSegments: 28,
   });
-  rimGeo.translate(0, 0, -(thickness - bevel * 2) / 2);
+  rimGeo.translate(0, 0, -(u < 1 ? rimDepth : thickness - bevel * 2) / 2);
 
-  return normalizeGeometryUVs(mergeGeometries([webGeo, rimGeo]));
+  const merged = mergeGeometries([webGeo, rimGeo]);
+  if (uvScale !== undefined) return normalizeGeometryUVs(merged, uvScale);
+  if (length < 10) return normalizeGeometryUVs(merged, Math.max(thickness * 4, length * 0.35));
+  return normalizeGeometryUVs(merged);
 }
 
 /**
@@ -853,6 +859,7 @@ export function gearGeometry({
   lighteningHoles = 0,
   lighteningR = 0,
   bevel = 0.8,
+  uvScale,
 }) {
   const sh = new THREE.Shape();
   const da = (Math.PI * 2) / teeth;
@@ -882,7 +889,7 @@ export function gearGeometry({
   if (lighteningHoles > 0) {
     const pitchR = (rRoot + Math.max(holeR, rRoot * 0.25)) * 0.52;
     const lr = lighteningR || Math.min((rRoot - holeR) * 0.24, (pitchR * Math.PI) / (lighteningHoles * 1.8));
-    if (lr > 1.5) {
+    if (lr > Math.min(1.5, rRoot * 0.06)) {
       for (let i = 0; i < lighteningHoles; i++) {
         const a = (i * Math.PI * 2) / lighteningHoles;
         const p = new THREE.Path();
@@ -911,6 +918,7 @@ export function gearGeometry({
     pos.needsUpdate = true;
   }
   g.computeVertexNormals();
+  if (uvScale !== undefined) return normalizeGeometryUVs(g, uvScale);
   return normalizeGeometryUVs(g);
 }
 
@@ -1340,8 +1348,7 @@ export function createSilkscreenDecal({
  *   2. Recessed dark structural chassis liner (`linerMat`, inset by `partingGap`) so panel seams read
  *      with crisp dark shadow lines even on pale white/silver shells;
  *   3. Countersunk socket-head perimeter bolts (`boltGeometry`) + `creviceAoRing` collars;
- *   4. Anodized red/orange mechanical quick-release latches (`accentMat`) on the parting edge;
- *   5. Flush technical silkscreen serial number decal (`01`~`08`).
+ *   4. Optional flush technical silkscreen serial number decal (`serialText`).
  */
 export function segmentedShellPanel({
   width = 78,
@@ -1353,20 +1360,17 @@ export function segmentedShellPanel({
   linerThickness = 3.2,
   boltInset = 9.5,
   boltRadius = 2.6,
-  latchCount = 2,
-  serialText = '01',
+  serialText = null,
   serialSub = 'PNL',
   slots = [],
   holes = [],
   shellMat = null,
   linerMat = null,
-  accentMat = null,
   boltMat = null,
 } = {}) {
   const M = createMaterials();
   const sMat = governIndustrialMaterial(shellMat || M.white, 'shell');
   const lMat = governIndustrialMaterial(linerMat || M.liner, 'shell');
-  const aMat = accentMat || M.anodizedRed;
   const bMat = boltMat || M.steel;
 
   const group = new THREE.Group();
@@ -1440,23 +1444,7 @@ export function segmentedShellPanel({
     group.add(ao);
   }
 
-  // 4. Anodized red/orange mechanical latches along the parting seam
-  if (latchCount > 0) {
-    const latchW = Math.min(12, width * 0.16);
-    const latchH = thickness * 0.85;
-    const latchD = 5.4;
-    const latchGeo = blockGeometry({ w: latchW, h: latchH, d: latchD, r: 1.2, bevel: 0.5 });
-    for (let i = 0; i < latchCount; i++) {
-      const side = i % 2 === 0 ? 1 : -1;
-      const zOff = latchCount > 2 ? ((Math.floor(i / 2) - 0.5) * length * 0.42) : 0;
-      const latch = new THREE.Mesh(latchGeo, aMat);
-      latch.position.set(side * (width * 0.5 - latchW * 0.32), 0.35, zOff);
-      latch.castShadow = true;
-      group.add(latch);
-    }
-  }
-
-  // 5. Silkscreen serial number decal flush on the outer face
+  // 4. Silkscreen serial number decal flush on the outer face
   if (serialText) {
     const decalW = Math.min(width * 0.42, 26);
     const decalH = decalW * 0.54;
@@ -2038,13 +2026,11 @@ export function createArticulatedChain({
   shellMat = null,
   jointMat = null,
   linerMat = null,
-  accentMat = null,
 } = {}) {
   const M = createMaterials();
   const sMat = governIndustrialMaterial(shellMat || M.white, 'shell');
   const jMat = governIndustrialMaterial(jointMat || M.titanium, 'shell');
   const lMat = governIndustrialMaterial(linerMat || M.liner, 'shell');
-  const aMat = accentMat || M.anodizedRed;
 
   const root = new THREE.Group();
   const segments = [];
@@ -2086,7 +2072,7 @@ export function createArticulatedChain({
     socketMesh.castShadow = true;
     segBody.add(socketMesh);
 
-    // Tapered machined outer collar + dark inner liner sleeve + anodized retention ring
+    // Tapered machined outer collar + dark inner liner sleeve
     const collarLen = Math.max(4, len * 0.68);
     const linerGeo = normalizeGeometryUVs(new THREE.CylinderGeometry(rNext * 0.82, r * 0.82, collarLen * 0.94, 24));
     const linerMesh = new THREE.Mesh(linerGeo, lMat);
@@ -2110,13 +2096,6 @@ export function createArticulatedChain({
     outerMesh.castShadow = true;
     outerMesh.receiveShadow = true;
     segBody.add(outerMesh);
-
-    if (i % 2 === 0) {
-      const latchGeo = blockGeometry({ w: Math.max(2.5, r * 0.24), h: collarLen * 0.42, d: 3.2, r: 0.8, bevel: 0.3 });
-      const latch = new THREE.Mesh(latchGeo, aMat);
-      latch.position.set(r * 0.96, len * 0.52, 0);
-      segBody.add(latch);
-    }
 
     if (serialPrefix && i < 8) {
       const decal = createSilkscreenDecal({
@@ -2710,6 +2689,7 @@ function createBenchTexture() {
 export function createCalLabStudio({ width, height, scenes = [], style = {}, maxDist = null }) {
   ACTIVE_REF_PALETTE = normalizeRefPalette(style.ref);
   const refLook = lookFromRefPalette(style.ref);
+  const mechProfile = resolveMechProfile(style.look?.mech ?? style.mech ?? style.ref?.mech);
   const studio = createStudio3D(THREE, {
     width,
     height,
@@ -2736,7 +2716,7 @@ export function createCalLabStudio({ width, height, scenes = [], style = {}, max
     if (ROLES_USED.glaze || ROLES_USED.metal) studio.lookRig.setRoleDemand(ROLES_USED);
     baseRender(frame);
   }
-  return { ...studio, render, bench, benchTex, refPalette: ACTIVE_REF_PALETTE, rolesUsed: ROLES_USED };
+  return { ...studio, render, bench, benchTex, refPalette: ACTIVE_REF_PALETTE, rolesUsed: ROLES_USED, mechProfile };
 }
 
 const MONO = '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace';
@@ -3094,8 +3074,8 @@ export function createGaugeHud({ camera, width, height }) {
 // 8. MACHINE-FEEL PRIMITIVES + MATERIAL ROLES (ADR-021, teardown absorption)
 // ============================================================================
 //
-// Method borrowed from the `teardown` skill (MIT, elvarofficial; see CREDITS.md): seams carry sunk liners and
-// pitch-exact clasps, rings stack and counter-rotate, fins repeat at an exact pitch, sleeves follow a curve,
+// Method borrowed from the `teardown` skill (MIT, elvarofficial; see CREDITS.md): seams carry sunk liners,
+// rings stack and counter-rotate, fins repeat at an exact pitch, sleeves follow a curve,
 // wear is painted into the COLOUR map, detail arrives with camera distance, metals are metals. Reimplemented here
 // for this engine; nothing of the teardown models, palettes or shot lists is carried over.
 //
@@ -3330,14 +3310,11 @@ export function windowRim(edge, opts) {
 // ---------------------------------------------------------------- seam hardware
 
 /**
- * Hardware along a seam so it reads as a joint, not a drawn line: a liner tube sunk into the gap and clasps that
- * bridge the gap at an EXACT `pitch` (every `altEvery`-th clasp takes `altMat`). `points`/`normals` describe any
- * curve you own (normals point out of the surface). With `surfaces` (the plates either side) each clasp is seated by
- * a ray per side and dropped when either side misses (a window cut it, or the plate turns away). `space` is the
- * object the group will be added to (matrixWorld converts the ray hits).
+ * Hardware along a seam so it reads as a joint, not a drawn line: a liner tube sunk into the seam groove.
+ * `points`/`normals` describe any curve you own (normals point out of the surface).
  */
 export function seamHardware(opts) {
-  const { points, normals, pitch, skipEnds, liner, clasp, surfaces, space } = need('seamHardware', opts, ['points', 'normals', 'pitch', 'skipEnds', 'liner', 'clasp', 'surfaces', 'space']);
+  const { points, normals, liner } = need('seamHardware', opts, ['points', 'normals', 'liner']);
   const grp = new THREE.Group();
   if (points.length < 2) return grp;
   const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
@@ -3347,56 +3324,6 @@ export function seamHardware(opts) {
     need('seamHardware.liner', liner, ['mat', 'radius', 'sink']);
     const pts = curve.getSpacedPoints(Math.max(8, Math.round(len / (liner.radius * 2.5)))).map((q, i, a) => q.clone().addScaledVector(nCurve.getPoint(i / (a.length - 1)).normalize(), -liner.sink));
     grp.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), pts.length * 2, liner.radius, 8, false), liner.mat));
-  }
-  if (clasp) {
-    need('seamHardware.clasp', clasp, ['mat', 'size', 'altEvery']);
-    const [cl, ch, cw] = clasp.size;
-    const count = Math.max(1, Math.floor((len * (1 - 2 * skipEnds)) / pitch));
-    const box = new THREE.BoxGeometry(cl, ch, cw);
-    const T = new THREE.Vector3(), B = new THREE.Vector3(), seatN = new THREE.Vector3();
-    const m = new THREE.Matrix4();
-    const ray = surfaces ? new THREE.Raycaster() : null;
-    const inv = space ? new THREE.Matrix4().copy(space.matrixWorld).invert() : null;
-    const toWorld = (v) => (space ? v.clone().applyMatrix4(space.matrixWorld) : v.clone());
-    const seat = (q, n) => {
-      const hits = [];
-      for (const side of [-1, 1]) {
-        const o = q.clone().addScaledVector(B, side * cw * 0.42).addScaledVector(n, ch * 6);
-        const ow = toWorld(o);
-        ray.set(ow, toWorld(o.clone().sub(n)).sub(ow).normalize());
-        ray.far = ch * 12;
-        const h = ray.intersectObjects(surfaces, false)[0];
-        if (!h || !h.face) return null;
-        hits.push(inv ? h.point.clone().applyMatrix4(inv) : h.point.clone());
-        const fn = h.face.normal.clone().transformDirection(h.object.matrixWorld);
-        if (inv) fn.transformDirection(inv);
-        if (fn.dot(n) < 0) fn.negate();
-        seatN.add(fn);
-      }
-      if (hits[0].distanceTo(hits[1]) > cw * 1.6) return null;
-      const mid = hits[0].add(hits[1]).multiplyScalar(0.5);
-      return mid.distanceTo(q) < cw * 1.2 ? mid : null;
-    };
-    for (let k = 0; k <= count; k++) {
-      const u = skipEnds + ((1 - 2 * skipEnds) * k) / Math.max(1, count);
-      let q = curve.getPointAt(u);
-      curve.getTangentAt(u, T).normalize();
-      let n = nCurve.getPoint(u).normalize();
-      B.crossVectors(T, n).normalize();
-      if (ray) {
-        seatN.set(0, 0, 0);
-        q = seat(q, n);
-        if (!q) continue;
-        n = seatN.normalize();
-        T.addScaledVector(n, -T.dot(n)).normalize();
-        B.crossVectors(T, n).normalize();
-      }
-      const mesh = new THREE.Mesh(box, k % clasp.altEvery === clasp.altEvery - 1 && clasp.altMat ? clasp.altMat : clasp.mat);
-      m.makeBasis(T, n, B);
-      mesh.quaternion.setFromRotationMatrix(m);
-      mesh.position.copy(q).addScaledVector(n, ch * 0.2);
-      grp.add(mesh);
-    }
   }
   return grp;
 }
@@ -3622,3 +3549,1962 @@ export function wearMaps(opts) {
   }
   return { bumpMap: tex(bc), roughnessMap: tex(rc), overlay: oc, colorMap };
 }
+
+// ============================================================================
+// 10. FUNCTIONAL INTERLOCKING KINEMATIC SUB-ASSEMBLIES & MECH PROFILE (ADR-021)
+// ============================================================================
+
+const EMPTY_UPDATE_OPTS = Object.freeze({});
+const UNIT_Y_AXIS = new THREE.Vector3(0, 1, 0);
+
+export const CAL_MECH_PRESETS = Object.freeze({
+  minimal: Object.freeze({
+    tier: 'minimal',
+    mode: 'minimal',
+    enabled: false,
+    foldingLinkages: false,
+    planetaryDrives: false,
+    syncIrises: false,
+    cardanGimbals: false,
+    microMotion: 0,
+  }),
+  kinetic: Object.freeze({
+    tier: 'kinetic',
+    mode: 'kinetic',
+    enabled: true,
+    foldingLinkages: true,
+    planetaryDrives: true,
+    syncIrises: true,
+    cardanGimbals: true,
+    microMotion: 1.0,
+  }),
+});
+
+function resolveMechPresetKey(raw) {
+  if (raw === undefined || raw === null || raw === false) return 'minimal';
+  if (raw === true) return 'kinetic';
+  if (typeof raw === 'string') {
+    const k = raw.trim().toLowerCase();
+    if (k === 'minimal' || k === 'none' || k === 'off') return 'minimal';
+    if (k === 'kinetic' || k === 'ilm') return 'kinetic';
+    throw new Error(`resolveMechProfile: unknown preset "${raw}" (expected "minimal" or "kinetic")`);
+  }
+  throw new Error(`resolveMechProfile: invalid preset "${String(raw)}"`);
+}
+
+/**
+ * Resolve mechanical articulation density profile (`minimal` vs `kinetic`).
+ * Undeclared (`undefined` / `null`) resolves to a shallow copy of `CAL_MECH_PRESETS.minimal`
+ * so existing worlds remain pixel-identical unless explicitly opted in.
+ */
+export function resolveMechProfile(input) {
+  if (input === undefined || input === null || typeof input === 'boolean' || typeof input === 'string') {
+    const key = resolveMechPresetKey(input);
+    return { ...CAL_MECH_PRESETS[key] };
+  }
+  if (typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('resolveMechProfile: expected preset string, boolean, or plain options object');
+  }
+  const rawBase = input.tier ?? input.mode ?? (input.enabled ? 'kinetic' : 'minimal');
+  const baseKey = resolveMechPresetKey(rawBase);
+  const base = CAL_MECH_PRESETS[baseKey];
+
+  const foldingLinkages = typeof input.foldingLinkages === 'boolean' ? input.foldingLinkages : base.foldingLinkages;
+  const planetaryDrives = typeof input.planetaryDrives === 'boolean' ? input.planetaryDrives : base.planetaryDrives;
+  const syncIrises = typeof input.syncIrises === 'boolean' ? input.syncIrises : base.syncIrises;
+  const cardanGimbals = typeof input.cardanGimbals === 'boolean' ? input.cardanGimbals : base.cardanGimbals;
+  const microMotion = clamp(
+    typeof input.microMotion === 'number' && Number.isFinite(input.microMotion) ? input.microMotion : base.microMotion,
+    0,
+    2,
+  );
+  const anyFamily = foldingLinkages || planetaryDrives || syncIrises || cardanGimbals;
+  const enabled = typeof input.enabled === 'boolean' ? input.enabled : anyFamily;
+  const tier = base.tier;
+
+  return {
+    tier,
+    mode: tier,
+    enabled,
+    foldingLinkages,
+    planetaryDrives,
+    syncIrises,
+    cardanGimbals,
+    microMotion,
+  };
+}
+
+function extrudeCenteredZ(shape, depth, bevel, curveSegments, uvScale) {
+  const d = Math.max(1e-5, depth);
+  const bv = clamp(bevel, 0, d * 0.28);
+  const bodyD = Math.max(1e-5, d - bv * 2);
+  const g = new THREE.ExtrudeGeometry(shape, {
+    depth: bodyD,
+    bevelEnabled: bv > 1e-6,
+    bevelThickness: bv,
+    bevelSize: bv,
+    bevelSegments: 2,
+    curveSegments,
+    steps: 1,
+  });
+  g.translate(0, 0, -bodyD * 0.5);
+  g.computeVertexNormals();
+  return normalizeGeometryUVs(g, uvScale);
+}
+
+function makeShadowMesh(geo, mat) {
+  const m = new THREE.Mesh(geo, mat);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+
+function buildSteppedPinZGeometry(rPin, length, rCollar, collarThick, uvScale) {
+  const halfL = length * 0.5;
+  const ch = Math.min(rPin * 0.16, length * 0.06);
+  const ct = Math.min(collarThick, length * 0.28);
+  const profile = [
+    [0, -halfL],
+    [Math.max(1e-5, rPin - ch), -halfL],
+    [rPin, -halfL + ch],
+    [rPin, halfL - ct],
+    [rCollar, halfL - ct],
+    [rCollar, halfL - ch * 0.5],
+    [Math.max(1e-5, rCollar - ch * 0.5), halfL],
+    [0, halfL],
+  ];
+  const g = new THREE.LatheGeometry(
+    profile.map(([r, y]) => new THREE.Vector2(r, y)),
+    24,
+  );
+  g.rotateX(Math.PI / 2);
+  g.computeVertexNormals();
+  return normalizeGeometryUVs(g, uvScale);
+}
+
+function buildBushingZGeometry(rInner, rOuter, rFlange, length, uvScale) {
+  const halfL = length * 0.5;
+  const flT = length * 0.24;
+  const profile = [
+    [rInner, -halfL],
+    [rOuter, -halfL],
+    [rOuter, halfL - flT],
+    [rFlange, halfL - flT],
+    [rFlange, halfL],
+    [rInner, halfL],
+    [rInner, -halfL],
+  ];
+  const g = new THREE.LatheGeometry(
+    profile.map(([r, y]) => new THREE.Vector2(Math.max(1e-5, r), y)),
+    24,
+  );
+  g.rotateX(Math.PI / 2);
+  g.computeVertexNormals();
+  return normalizeGeometryUVs(g, uvScale);
+}
+
+function buildLugZGeometry(rEar, baseDrop, baseHalfW, thickZ, rBore, bevel, uvScale) {
+  const sh = new THREE.Shape();
+  const hw = Math.max(rEar, baseHalfW);
+  sh.moveTo(-hw, -baseDrop);
+  sh.lineTo(hw, -baseDrop);
+  sh.lineTo(rEar, 0);
+  sh.absarc(0, 0, rEar, 0, Math.PI, false);
+  sh.closePath();
+  if (rBore > 0) {
+    const hole = new THREE.Path();
+    hole.absarc(0, 0, Math.min(rBore, rEar * 0.74), 0, Math.PI * 2, true);
+    sh.holes.push(hole);
+  }
+  return extrudeCenteredZ(sh, thickZ, bevel, 24, uvScale);
+}
+
+function read2DPoint(pt, fn, name) {
+  if (Array.isArray(pt) && pt.length >= 2) {
+    const x = pt[0];
+    const y = pt[1];
+    if (Number.isFinite(x) && Number.isFinite(y)) return [x, y];
+  } else if (pt && typeof pt === 'object') {
+    const x = pt.x;
+    const y = pt.y;
+    if (Number.isFinite(x) && Number.isFinite(y)) return [x, y];
+  }
+  throw new Error(`${fn}: invalid 2D point for "${name}"`);
+}
+
+function setPinPoint2D(slot, x, y) {
+  if (Array.isArray(slot)) {
+    slot[0] = x;
+    slot[1] = y;
+    slot.x = x;
+    slot.y = y;
+    return slot;
+  }
+  const p = [x, y];
+  p.x = x;
+  p.y = y;
+  return p;
+}
+
+/**
+ * Closed-form planar 4-bar linkage solver (`solveFourBar`).
+ * Clamps unreachable coupler-to-rocker spans smoothly so extreme travel never yields `NaN`.
+ * Pass reusable `out` object for zero heap allocations in per-frame loops.
+ */
+export function solveFourBar(opts) {
+  need('solveFourBar', opts, ['groundA', 'groundB', 'crankLen', 'couplerLen', 'rockerLen', 'crankAngle']);
+  const { groundA, groundB, crankLen, couplerLen, rockerLen, crankAngle } = opts;
+  const sign = (opts.sign ?? 1) >= 0 ? 1 : -1;
+
+  if (!(crankLen > 0) || !Number.isFinite(crankLen)) throw new Error('solveFourBar: crankLen must be > 0');
+  if (!(couplerLen > 0) || !Number.isFinite(couplerLen)) throw new Error('solveFourBar: couplerLen must be > 0');
+  if (!(rockerLen > 0) || !Number.isFinite(rockerLen)) throw new Error('solveFourBar: rockerLen must be > 0');
+  if (!Number.isFinite(crankAngle)) throw new Error('solveFourBar: crankAngle must be finite');
+
+  let ax;
+  let ay;
+  let bx;
+  let by;
+  if (Array.isArray(groundA)) {
+    ax = groundA[0];
+    ay = groundA[1];
+  } else if (groundA && typeof groundA === 'object') {
+    ax = groundA.x;
+    ay = groundA.y;
+  }
+  if (Array.isArray(groundB)) {
+    bx = groundB[0];
+    by = groundB[1];
+  } else if (groundB && typeof groundB === 'object') {
+    bx = groundB.x;
+    by = groundB.y;
+  }
+  if (!Number.isFinite(ax) || !Number.isFinite(ay)) read2DPoint(groundA, 'solveFourBar', 'groundA');
+  if (!Number.isFinite(bx) || !Number.isFinite(by)) read2DPoint(groundB, 'solveFourBar', 'groundB');
+
+  const cx = ax + crankLen * Math.cos(crankAngle);
+  const cy = ay + crankLen * Math.sin(crankAngle);
+
+  const dx = bx - cx;
+  const dy = by - cy;
+  const sRaw = Math.hypot(dx, dy);
+  const eps = 1e-5 * (couplerLen + rockerLen);
+  let sMin = Math.abs(couplerLen - rockerLen) + eps;
+  let sMax = couplerLen + rockerLen - eps;
+  if (sMin > sMax) {
+    const mid = 0.5 * (sMin + sMax);
+    sMin = mid;
+    sMax = mid;
+  }
+
+  const clamped = sRaw < sMin || sRaw > sMax;
+  const s = clamp(sRaw, sMin, sMax);
+  const ex = sRaw > 1e-9 ? dx / sRaw : 1;
+  const ey = sRaw > 1e-9 ? dy / sRaw : 0;
+
+  const cosGamma = clamp((couplerLen * couplerLen + s * s - rockerLen * rockerLen) / (2 * couplerLen * s), -1, 1);
+  const sinGamma = Math.sqrt(Math.max(0, 1 - cosGamma * cosGamma));
+
+  const ux = ex * cosGamma + sign * (-ey) * sinGamma;
+  const uy = ey * cosGamma + sign * ex * sinGamma;
+  const px = cx + couplerLen * ux;
+  const py = cy + couplerLen * uy;
+
+  const couplerAngle = Math.atan2(py - cy, px - cx);
+  const rockerAngle = Math.atan2(py - by, px - bx);
+
+  const target = opts.out || {};
+  target.crankPin = setPinPoint2D(target.crankPin, cx, cy);
+  target.couplerPin = setPinPoint2D(target.couplerPin, px, py);
+  target.couplerAngle = couplerAngle;
+  target.rockerAngle = rockerAngle;
+  target.clamped = clamped;
+  return target;
+}
+
+/**
+ * Dual-Arm Fork-and-Tongue Clevis Scissor / Pantograph Linkage (`foldingLinkageRig`).
+ * Bridges live sockets `socketA` and `socketB` with exact Law-of-Cosines kinematics when coupled
+ * (`decouple === 0`) and cleanly extracts the hinge pin to unpin rigid half-arms when `decouple > 0`
+ * (zero link scale stretching, zero `NaN` across singularities).
+ */
+export function foldingLinkageRig(opts) {
+  need('foldingLinkageRig', opts, [
+    'socketA',
+    'socketB',
+    'lengthA',
+    'lengthB',
+    'beamWidth',
+    'thickness',
+    'clevisGap',
+    'pinRadius',
+    'bendDir',
+    'linkMat',
+    'clevisMat',
+    'pinMat',
+  ]);
+
+  const {
+    socketA,
+    socketB,
+    lengthA,
+    lengthB,
+    beamWidth,
+    thickness,
+    clevisGap,
+    pinRadius,
+    bendDir,
+    linkMat,
+    clevisMat,
+    pinMat,
+  } = opts;
+  const couplerOffset = opts.couplerOffset ?? 0;
+  const parkAngle = opts.parkAngle ?? 0.32;
+
+  if (!socketA || !socketA.isObject3D) throw new Error('foldingLinkageRig: socketA must be a THREE.Object3D');
+  if (!socketB || !socketB.isObject3D) throw new Error('foldingLinkageRig: socketB must be a THREE.Object3D');
+  if (!(lengthA > 0) || !Number.isFinite(lengthA)) throw new Error('foldingLinkageRig: lengthA must be > 0');
+  if (!(lengthB > 0) || !Number.isFinite(lengthB)) throw new Error('foldingLinkageRig: lengthB must be > 0');
+  if (!(beamWidth > 0) || !Number.isFinite(beamWidth)) throw new Error('foldingLinkageRig: beamWidth must be > 0');
+  if (!(thickness > 0) || !Number.isFinite(thickness)) throw new Error('foldingLinkageRig: thickness must be > 0');
+  if (!(clevisGap > 0) || !Number.isFinite(clevisGap)) throw new Error('foldingLinkageRig: clevisGap must be > 0');
+  if (!(pinRadius > 0) || !Number.isFinite(pinRadius)) throw new Error('foldingLinkageRig: pinRadius must be > 0');
+
+  const bendBase = new THREE.Vector3();
+  if (Array.isArray(bendDir) && bendDir.length >= 3) {
+    bendBase.set(bendDir[0], bendDir[1], bendDir[2]);
+  } else if (bendDir && typeof bendDir === 'object' && Number.isFinite(bendDir.x)) {
+    bendBase.set(bendDir.x, bendDir.y, bendDir.z);
+  } else {
+    throw new Error('foldingLinkageRig: bendDir must be [x, y, z] or THREE.Vector3');
+  }
+  if (bendBase.lengthSq() < 1e-12 || !Number.isFinite(bendBase.lengthSq())) {
+    throw new Error('foldingLinkageRig: bendDir must be non-zero');
+  }
+  bendBase.normalize();
+
+  const fallbackChord = new THREE.Vector3();
+  if (Math.abs(bendBase.x) < 0.9) fallbackChord.set(1, 0, 0);
+  else fallbackChord.set(0, 1, 0);
+  fallbackChord.addScaledVector(bendBase, -fallbackChord.dot(bendBase)).normalize();
+
+  const uv = opts.uvScale ?? Math.max(thickness * 4, (lengthA + lengthB) * 0.22);
+  const bevel = Math.min(thickness * 0.09, beamWidth * 0.05);
+  const rBig = Math.max(beamWidth * 0.60, pinRadius * 1.85);
+  const rSmall = Math.max(beamWidth * 0.48, pinRadius * 1.62);
+  const rBore = Math.min(pinRadius * 1.02, rSmall * 0.74);
+  const tongueThick = Math.min(thickness, clevisGap * 0.86);
+  const cheekZ = (clevisGap + thickness) * 0.5;
+  const fullSpanZ = clevisGap + thickness * 2;
+
+  const group = new THREE.Group();
+  const clevisA = new THREE.Group();
+  const clevisB = new THREE.Group();
+  const armAGroup = new THREE.Group();
+  const armBGroup = new THREE.Group();
+  group.add(clevisA, clevisB, armAGroup, armBGroup);
+
+  const detailMeshes = [];
+
+  // Shared fastener & pin geometries
+  const capFastenerGeo = normalizeGeometryUVs(
+    boltGeometry({ r: pinRadius * 0.72, h: pinRadius * 0.85, washer: true }).rotateX(Math.PI / 2),
+    uv,
+  );
+  const baseBoltGeo = normalizeGeometryUVs(
+    boltGeometry({ r: Math.min(pinRadius * 0.55, thickness * 0.45), h: pinRadius * 0.72, washer: true }),
+    uv,
+  );
+  const jointPinGeo = buildSteppedPinZGeometry(
+    pinRadius,
+    fullSpanZ * 1.18,
+    pinRadius * 1.38,
+    pinRadius * 0.42,
+    uv,
+  );
+
+  // 1. Clevis A (central lug riding inside armA's twin fork cheeks + base plate + socket pin)
+  const lugAGeo = buildLugZGeometry(
+    rBig * 0.96,
+    rBig * 0.82,
+    rBig * 1.15,
+    Math.min(thickness, clevisGap * 0.84),
+    rBore,
+    bevel,
+    uv,
+  );
+  const basePadGeo = extrudeCenteredZ(
+    makeRoundedRectShape(rBig * 2.5, fullSpanZ * 1.12, Math.min(rBig * 0.25, fullSpanZ * 0.2)),
+    thickness * 0.62,
+    bevel * 0.8,
+    12,
+    uv,
+  );
+  basePadGeo.rotateX(-Math.PI / 2);
+
+  const lugAMesh = makeShadowMesh(lugAGeo, clevisMat);
+  const padAMesh = makeShadowMesh(basePadGeo, clevisMat);
+  padAMesh.position.y = -rBig * 0.82 - thickness * 0.31;
+  const pinAMesh = makeShadowMesh(jointPinGeo, pinMat);
+  const capAPos = makeShadowMesh(capFastenerGeo, pinMat);
+  const capANeg = makeShadowMesh(capFastenerGeo, pinMat);
+  capANeg.rotation.y = Math.PI;
+  const boltAL = makeShadowMesh(baseBoltGeo, pinMat);
+  const boltAR = makeShadowMesh(baseBoltGeo, pinMat);
+  boltAL.position.set(-rBig * 0.88, -rBig * 0.82 + thickness * 0.2, 0);
+  boltAR.position.set(rBig * 0.88, -rBig * 0.82 + thickness * 0.2, 0);
+  clevisA.add(lugAMesh, padAMesh, pinAMesh, capAPos, capANeg, boltAL, boltAR);
+  detailMeshes.push(capAPos, capANeg, boltAL, boltAR);
+
+  // 2. Clevis B (twin-ear U-fork straddling armB's central tongue + base plate + socket pin)
+  const lugBEarGeo = buildLugZGeometry(
+    rBig * 0.96,
+    rBig * 0.82,
+    rBig * 1.15,
+    thickness * 0.92,
+    rBore,
+    bevel,
+    uv,
+  );
+  const lugBPos = makeShadowMesh(lugBEarGeo, clevisMat);
+  const lugBNeg = makeShadowMesh(lugBEarGeo, clevisMat);
+  lugBPos.position.z = cheekZ;
+  lugBNeg.position.z = -cheekZ;
+  const padBMesh = makeShadowMesh(basePadGeo, clevisMat);
+  padBMesh.position.y = -rBig * 0.82 - thickness * 0.31;
+  const pinBMesh = makeShadowMesh(jointPinGeo, pinMat);
+  const capBPos = makeShadowMesh(capFastenerGeo, pinMat);
+  const capBNeg = makeShadowMesh(capFastenerGeo, pinMat);
+  capBNeg.rotation.y = Math.PI;
+  const boltBL = makeShadowMesh(baseBoltGeo, pinMat);
+  const boltBR = makeShadowMesh(baseBoltGeo, pinMat);
+  boltBL.position.set(-rBig * 0.88, -rBig * 0.82 + thickness * 0.2, 0);
+  boltBR.position.set(rBig * 0.88, -rBig * 0.82 + thickness * 0.2, 0);
+  clevisB.add(lugBPos, lugBNeg, padBMesh, pinBMesh, capBPos, capBNeg, boltBL, boltBR);
+  detailMeshes.push(capBPos, capBNeg, boltBL, boltBR);
+
+  // 3. Arm A (twin-cheek fork of rigid center-to-center length L1 + tie-bridge + extractable elbowPin)
+  const armALinkGeo = ribbedLinkGeometry({
+    length: lengthA,
+    rBig,
+    rSmall,
+    rBoreBig: rBore,
+    rBoreSmall: rBore,
+    beamW: beamWidth,
+    thickness,
+    webThickness: thickness * 0.38,
+    bevel,
+    uvScale: uv,
+  });
+  const cheekPosMesh = makeShadowMesh(armALinkGeo, linkMat);
+  const cheekNegMesh = makeShadowMesh(armALinkGeo, linkMat);
+  cheekPosMesh.position.set(0, lengthA * 0.5, cheekZ);
+  cheekNegMesh.position.set(0, lengthA * 0.5, -cheekZ);
+  armAGroup.add(cheekPosMesh, cheekNegMesh);
+
+  if (lengthA > rBig * 3.1) {
+    const bridgeGeo = extrudeCenteredZ(
+      makeRoundedRectShape(beamWidth * 0.62, Math.min(lengthA * 0.16, beamWidth * 0.85), bevel * 1.5),
+      clevisGap * 1.02,
+      bevel * 0.6,
+      8,
+      uv,
+    );
+    const bridgeMesh = makeShadowMesh(bridgeGeo, clevisMat);
+    bridgeMesh.position.set(0, rBig * 1.35 + lengthA * 0.08, 0);
+    armAGroup.add(bridgeMesh);
+  }
+
+  const elbowPin = makeShadowMesh(jointPinGeo, pinMat);
+  elbowPin.position.set(0, lengthA, 0);
+  const elbowCapPos = makeShadowMesh(capFastenerGeo, pinMat);
+  const elbowCapNeg = makeShadowMesh(capFastenerGeo, pinMat);
+  elbowCapNeg.rotation.y = Math.PI;
+  armAGroup.add(elbowPin, elbowCapPos, elbowCapNeg);
+  detailMeshes.push(elbowCapPos, elbowCapNeg);
+
+  // 4. Arm B (central tongue link of rigid center-to-center length L2 + stepped bronze bushing)
+  const armBLinkGeo = ribbedLinkGeometry({
+    length: lengthB,
+    rBig,
+    rSmall,
+    rBoreBig: rBore,
+    rBoreSmall: rBore,
+    beamW: beamWidth * 0.92,
+    thickness: tongueThick,
+    webThickness: tongueThick * 0.38,
+    bevel,
+    uvScale: uv,
+  });
+  const tongueMesh = makeShadowMesh(armBLinkGeo, linkMat);
+  tongueMesh.position.set(0, lengthB * 0.5, 0);
+
+  const bushingGeo = buildBushingZGeometry(
+    pinRadius * 1.01,
+    Math.min(rSmall * 0.84, pinRadius * 1.32),
+    Math.min(rSmall * 0.94, pinRadius * 1.52),
+    tongueThick * 1.12,
+    uv,
+  );
+  const elbowBushing = makeShadowMesh(bushingGeo, pinMat);
+  elbowBushing.position.set(0, lengthB, 0);
+  armBGroup.add(tongueMesh, elbowBushing);
+  detailMeshes.push(elbowBushing);
+
+  // 5. Optional parallel 4-bar pantograph coupler link (via solveFourBar)
+  let couplerMesh = null;
+  let couplerPinStart = null;
+  let couplerPinEnd = null;
+  const zCoupler = cheekZ + thickness * 0.95;
+  if (couplerOffset > 0) {
+    const cThick = thickness * 0.68;
+    const couplerGeo = ribbedLinkGeometry({
+      length: lengthA,
+      rBig: rSmall * 0.82,
+      rSmall: rSmall * 0.78,
+      rBoreBig: rBore * 0.72,
+      rBoreSmall: rBore * 0.72,
+      beamW: beamWidth * 0.58,
+      thickness: cThick,
+      webThickness: cThick * 0.4,
+      bevel: bevel * 0.75,
+      uvScale: uv,
+    });
+    couplerGeo.translate(0, lengthA * 0.5, 0);
+    couplerMesh = makeShadowMesh(couplerGeo, linkMat);
+    group.add(couplerMesh);
+
+    const auxPinGeo = buildSteppedPinZGeometry(
+      pinRadius * 0.72,
+      (zCoupler - cheekZ + thickness) * 1.25,
+      pinRadius * 1.02,
+      pinRadius * 0.32,
+      uv,
+    );
+    couplerPinStart = makeShadowMesh(auxPinGeo, pinMat);
+    couplerPinEnd = makeShadowMesh(auxPinGeo, pinMat);
+    group.add(couplerPinStart, couplerPinEnd);
+    detailMeshes.push(couplerPinStart, couplerPinEnd);
+  }
+
+  // Pre-allocated scratch buffers for zero-allocation update()
+  const _invGroupWorld = new THREE.Matrix4();
+  const _pA = new THREE.Vector3();
+  const _pB = new THREE.Vector3();
+  const _delta = new THREE.Vector3();
+  const _uHat = new THREE.Vector3();
+  const _nHat = new THREE.Vector3();
+  const _wHat = new THREE.Vector3();
+  const _dA = new THREE.Vector3();
+  const _dB = new THREE.Vector3();
+  const _xAxis = new THREE.Vector3();
+  const _negU = new THREE.Vector3();
+  const _basis = new THREE.Matrix4();
+  const _elbowA = new THREE.Vector3();
+  const _elbowB = new THREE.Vector3();
+  const _cOrigin = new THREE.Vector3();
+  const _cDir = new THREE.Vector3();
+  const _fourBarOut = {
+    crankPin: setPinPoint2D(null, 0, 0),
+    couplerPin: setPinPoint2D(null, 0, 0),
+    couplerAngle: 0,
+    rockerAngle: 0,
+    clamped: false,
+  };
+  const _fourBarIn = {
+    groundA: [0, 0],
+    groundB: [0, couplerOffset],
+    crankLen: lengthA,
+    couplerLen: Math.max(1e-5, couplerOffset),
+    rockerLen: lengthA,
+    crankAngle: 0,
+    sign: 1,
+    out: _fourBarOut,
+  };
+  const _state = {
+    distance: 0,
+    elbowA: _elbowA,
+    elbowB: _elbowB,
+    angleA: 0,
+    angleB: 0,
+    decoupled: 0,
+  };
+
+  const totalReach = lengthA + lengthB;
+  const minSpan = Math.abs(lengthA - lengthB);
+  const epsSpan = 1e-6 * totalReach;
+  const capBaseZ = fullSpanZ * 0.59 + pinRadius * 0.38;
+
+  function update(uOpts = EMPTY_UPDATE_OPTS) {
+    const rawDecouple = uOpts.decouple ?? 0;
+    const ex = smootherstep(0, 1, clamp(uOpts.explode ?? 0, 0, 1));
+
+    group.updateWorldMatrix(true, false);
+    socketA.updateWorldMatrix(true, false);
+    socketB.updateWorldMatrix(true, false);
+    _invGroupWorld.copy(group.matrixWorld).invert();
+
+    _pA.setFromMatrixPosition(socketA.matrixWorld).applyMatrix4(_invGroupWorld);
+    _pB.setFromMatrixPosition(socketB.matrixWorld).applyMatrix4(_invGroupWorld);
+    _delta.subVectors(_pB, _pA);
+    const d = _delta.length();
+
+    if (d < 1e-5 * totalReach) {
+      _uHat.copy(fallbackChord);
+    } else {
+      _uHat.copy(_delta).divideScalar(d);
+    }
+
+    // Orthonormal linkage basis (uHat, nHat, wHat) with det = +1
+    _nHat.copy(bendBase).addScaledVector(_uHat, -bendBase.dot(_uHat));
+    const nLenSq = _nHat.lengthSq();
+    if (nLenSq < 1e-10) {
+      if (Math.abs(_uHat.y) < 0.9) _nHat.set(-_uHat.z, 0, _uHat.x);
+      else _nHat.set(0, _uHat.z, -_uHat.y);
+      // Cross with uHat so fallback is strictly orthogonal
+      _wHat.crossVectors(_uHat, _nHat).normalize();
+      _nHat.crossVectors(_wHat, _uHat).normalize();
+    } else {
+      _nHat.divideScalar(Math.sqrt(nLenSq));
+      _wHat.crossVectors(_uHat, _nHat).normalize();
+    }
+
+    // Exact Law-of-Cosines angles
+    let alphaA;
+    let alphaB;
+    if (d <= epsSpan && minSpan <= epsSpan) {
+      alphaA = Math.PI * 0.5;
+      alphaB = Math.PI * 0.5;
+    } else {
+      const dIk = clamp(d, Math.max(epsSpan, minSpan), totalReach);
+      const cosA = clamp((lengthA * lengthA + dIk * dIk - lengthB * lengthB) / (2 * lengthA * dIk), -1, 1);
+      const cosB = clamp((lengthB * lengthB + dIk * dIk - lengthA * lengthA) / (2 * lengthB * dIk), -1, 1);
+      alphaA = Math.acos(cosA);
+      alphaB = Math.acos(cosB);
+    }
+
+    const overReachK = d > totalReach ? smootherstep(0, 0.25 * totalReach, d - totalReach) : 0;
+    const underReachK = d < minSpan - epsSpan ? smootherstep(0, 0.25 * totalReach, minSpan - d) : 0;
+    const explicitK = smootherstep(0, 1, clamp(rawDecouple, 0, 1));
+    const kDec = clamp(Math.max(explicitK, overReachK, underReachK), 0, 1);
+
+    const thetaA = lerp(alphaA, parkAngle, kDec);
+    const thetaB = lerp(alphaB, parkAngle, kDec);
+
+    const cosTA = Math.cos(thetaA);
+    const sinTA = Math.sin(thetaA);
+    const cosTB = Math.cos(thetaB);
+    const sinTB = Math.sin(thetaB);
+
+    _dA.copy(_uHat).multiplyScalar(cosTA).addScaledVector(_nHat, sinTA);
+    _dB.copy(_uHat).multiplyScalar(-cosTB).addScaledVector(_nHat, sinTB);
+
+    _elbowA.copy(_pA).addScaledVector(_dA, lengthA);
+    _elbowB.copy(_pB).addScaledVector(_dB, lengthB);
+
+    // Pose clevisA at pA (+X = uHat, +Y = nHat, +Z = wHat; det = +1)
+    clevisA.position.copy(_pA);
+    _basis.makeBasis(_uHat, _nHat, _wHat);
+    clevisA.quaternion.setFromRotationMatrix(_basis);
+
+    // Pose clevisB at pB
+    clevisB.position.copy(_pB);
+    _negU.copy(_uHat).negate();
+    _xAxis.copy(_wHat).negate();
+    _basis.makeBasis(_negU, _nHat, _xAxis);
+    clevisB.quaternion.setFromRotationMatrix(_basis);
+
+    // Pose rigid armAGroup at pA along dA (det[dA x wHat, dA, wHat] = +1)
+    armAGroup.position.copy(_pA);
+    _xAxis.crossVectors(_dA, _wHat).normalize();
+    _basis.makeBasis(_xAxis, _dA, _wHat);
+    armAGroup.quaternion.setFromRotationMatrix(_basis);
+
+    // Pose rigid armBGroup at pB along dB (det[dB x wHat, dB, wHat] = +1)
+    armBGroup.position.copy(_pB);
+    _xAxis.crossVectors(_dB, _wHat).normalize();
+    _basis.makeBasis(_xAxis, _dB, _wHat);
+    armBGroup.quaternion.setFromRotationMatrix(_basis);
+
+    // Axial pin & fastener staging on decouple / explode (zero link scale stretching)
+    const pinExtract = 1.25 * fullSpanZ * kDec;
+    const capShift = pinRadius * 2.1 * ex;
+    elbowPin.position.set(0, lengthA, pinExtract);
+    elbowCapPos.position.set(0, lengthA, capBaseZ + pinExtract + capShift);
+    elbowCapNeg.position.set(0, lengthA, -capBaseZ - capShift);
+    elbowBushing.position.set(0, lengthB, -tongueThick * 0.45 * ex);
+
+    capAPos.position.set(0, 0, capBaseZ + capShift);
+    capANeg.position.set(0, 0, -capBaseZ - capShift);
+    capBPos.position.set(0, 0, capBaseZ + capShift);
+    capBNeg.position.set(0, 0, -capBaseZ - capShift);
+
+    if (couplerMesh) {
+      _fourBarIn.crankAngle = thetaA;
+      solveFourBar(_fourBarIn);
+      const rAng = _fourBarOut.rockerAngle;
+      const zOff = zCoupler + fullSpanZ * 0.45 * ex;
+      _cOrigin.copy(_pA).addScaledVector(_nHat, couplerOffset).addScaledVector(_wHat, zOff);
+      _cDir.copy(_uHat).multiplyScalar(Math.cos(rAng)).addScaledVector(_nHat, Math.sin(rAng));
+      _xAxis.crossVectors(_cDir, _wHat).normalize();
+      _basis.makeBasis(_xAxis, _cDir, _wHat);
+      couplerMesh.position.copy(_cOrigin);
+      couplerMesh.quaternion.setFromRotationMatrix(_basis);
+
+      couplerPinStart.position.copy(_pA).addScaledVector(_nHat, couplerOffset).addScaledVector(_wHat, zOff * 0.72);
+      couplerPinStart.quaternion.copy(clevisA.quaternion);
+      couplerPinEnd.position
+        .copy(_pA)
+        .addScaledVector(_uHat, _fourBarOut.couplerPin[0])
+        .addScaledVector(_nHat, _fourBarOut.couplerPin[1])
+        .addScaledVector(_wHat, zOff * 0.72);
+      couplerPinEnd.quaternion.copy(armAGroup.quaternion);
+    }
+
+    _state.distance = d;
+    _state.angleA = thetaA;
+    _state.angleB = thetaB;
+    _state.decoupled = kDec;
+    return _state;
+  }
+
+  update(EMPTY_UPDATE_OPTS);
+
+  return {
+    group,
+    armAGroup,
+    armBGroup,
+    clevisA,
+    clevisB,
+    elbowPin,
+    couplerMesh,
+    detailMeshes,
+    update,
+  };
+}
+
+function buildInternalRingGearGeometry({
+  teeth,
+  rTip,
+  rRoot,
+  rOuter,
+  lugCount,
+  lugRadius,
+  boltRadius,
+  width,
+  helix,
+  bevel,
+  phaseOffset,
+  uvScale,
+}) {
+  const sh = new THREE.Shape();
+  const outerSteps = Math.max(96, lugCount * 24);
+  for (let i = 0; i <= outerSteps; i++) {
+    const a = (i / outerSteps) * Math.PI * 2;
+    const lugWave = lugCount > 0 ? Math.pow(0.5 + 0.5 * Math.cos(a * lugCount), 4) : 0;
+    const rr = rOuter + lugRadius * lugWave;
+    const x = rr * Math.cos(a);
+    const y = rr * Math.sin(a);
+    if (i === 0) sh.moveTo(x, y);
+    else sh.lineTo(x, y);
+  }
+  sh.closePath();
+
+  // Internal toothed annulus hole (strictly CW decreasing angle from 2*pi down to 0)
+  const toothHole = new THREE.Path();
+  const da = (Math.PI * 2) / teeth;
+  let first = true;
+  for (let i = teeth - 1; i >= 0; i--) {
+    const a0 = i * da + phaseOffset;
+    const pts = [
+      [rRoot, a0 + da * 0.75],
+      [rTip, a0 + da * 0.62],
+      [rTip, a0 + da * 0.33],
+      [rRoot, a0 + da * 0.20],
+      [rRoot, a0],
+    ];
+    for (let k = 0; k < pts.length; k++) {
+      const [rr, a] = pts[k];
+      const x = rr * Math.cos(a);
+      const y = rr * Math.sin(a);
+      if (first) {
+        toothHole.moveTo(x, y);
+        first = false;
+      } else {
+        toothHole.lineTo(x, y);
+      }
+    }
+  }
+  toothHole.closePath();
+  sh.holes.push(toothHole);
+
+  if (lugCount > 0 && boltRadius > 0) {
+    const rBoltCircle = rOuter + lugRadius * 0.38;
+    for (let i = 0; i < lugCount; i++) {
+      const a = (i * Math.PI * 2) / lugCount;
+      const bh = new THREE.Path();
+      bh.absarc(Math.cos(a) * rBoltCircle, Math.sin(a) * rBoltCircle, boltRadius, 0, Math.PI * 2, true);
+      sh.holes.push(bh);
+    }
+  }
+
+  const bv = clamp(bevel, 0, width * 0.2);
+  const g = new THREE.ExtrudeGeometry(sh, {
+    depth: width,
+    bevelEnabled: bv > 1e-6,
+    bevelThickness: bv,
+    bevelSize: bv,
+    bevelSegments: 1,
+    curveSegments: 4,
+  });
+  g.translate(0, 0, -width * 0.5);
+  if (helix) {
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const a = (pos.getZ(i) / width) * helix;
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      pos.setXY(i, x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a));
+    }
+    pos.needsUpdate = true;
+  }
+  g.computeVertexNormals();
+  return normalizeGeometryUVs(g, uvScale);
+}
+
+function buildCarrierCagePlateGeometry(rCarrier, rInnerBore, orbitAngles, rPinBore, rBoss, plateThick, bevel, uvScale) {
+  const rOuter = rCarrier + rBoss;
+  const sh = new THREE.Shape();
+  sh.absarc(0, 0, rOuter, 0, Math.PI * 2, false);
+
+  const centerHole = new THREE.Path();
+  centerHole.absarc(0, 0, rInnerBore, 0, Math.PI * 2, true);
+  sh.holes.push(centerHole);
+
+  for (let i = 0; i < orbitAngles.length; i++) {
+    const a = orbitAngles[i];
+    const ph = new THREE.Path();
+    ph.absarc(Math.cos(a) * rCarrier, Math.sin(a) * rCarrier, rPinBore, 0, Math.PI * 2, true);
+    sh.holes.push(ph);
+  }
+
+  // Weight-relief windows between adjacent planet pin bosses
+  const n = orbitAngles.length;
+  const rMid = (rInnerBore + rOuter) * 0.5;
+  const radialSpan = rOuter - rInnerBore;
+  for (let i = 0; i < n; i++) {
+    const a0 = orbitAngles[i];
+    const a1 = i + 1 < n ? orbitAngles[i + 1] : orbitAngles[0] + Math.PI * 2;
+    const gap = a1 - a0;
+    const aMid = a0 + gap * 0.5;
+    const rWin = Math.min(radialSpan * 0.24, rMid * gap * 0.22);
+    const minPinClear = Math.hypot(Math.cos(aMid) * rMid - Math.cos(a0) * rCarrier, Math.sin(aMid) * rMid - Math.sin(a0) * rCarrier) - rBoss * 0.85;
+    const effR = Math.min(rWin, minPinClear);
+    if (effR > radialSpan * 0.08) {
+      const wh = new THREE.Path();
+      wh.absarc(Math.cos(aMid) * rMid, Math.sin(aMid) * rMid, effR, 0, Math.PI * 2, true);
+      sh.holes.push(wh);
+    }
+  }
+
+  return extrudeCenteredZ(sh, plateThick, bevel, 36, uvScale);
+}
+
+/**
+ * True Epicyclic Planetary Gear Train (`planetaryDriveRig`).
+ * Enforces exact Willis zero-slip meshing ratios (`ringTeeth = sunTeeth + 2 * planetTeeth`),
+ * assembly-condition tooth-phase quantization across `planetCount` planets, and coaxial teardown staging.
+ */
+export function planetaryDriveRig(opts) {
+  need('planetaryDriveRig', opts, [
+    'sunTeeth',
+    'planetTeeth',
+    'planetCount',
+    'module',
+    'faceWidth',
+    'carrierMat',
+    'gearMat',
+    'pinMat',
+  ]);
+
+  const {
+    sunTeeth,
+    planetTeeth,
+    planetCount,
+    module: mod,
+    faceWidth,
+    carrierMat,
+    gearMat,
+    pinMat,
+  } = opts;
+  const sunMat = opts.sunMat ?? gearMat;
+  const ringMat = opts.ringMat ?? carrierMat;
+  const helix = opts.helix ?? 0;
+  const lighteningHoles = opts.lighteningHoles ?? 6;
+
+  if (!Number.isInteger(sunTeeth) || sunTeeth < 8) {
+    throw new Error(`planetaryDriveRig: sunTeeth (${sunTeeth}) must be an integer >= 8`);
+  }
+  if (!Number.isInteger(planetTeeth) || planetTeeth < 6) {
+    throw new Error(`planetaryDriveRig: planetTeeth (${planetTeeth}) must be an integer >= 6`);
+  }
+  if (!Number.isInteger(planetCount) || planetCount < 2) {
+    throw new Error(`planetaryDriveRig: planetCount (${planetCount}) must be an integer >= 2`);
+  }
+  if (!(mod > 0) || !Number.isFinite(mod)) {
+    throw new Error('planetaryDriveRig: module must be > 0');
+  }
+  if (!(faceWidth > 0) || !Number.isFinite(faceWidth)) {
+    throw new Error('planetaryDriveRig: faceWidth must be > 0');
+  }
+  if (Math.sin(Math.PI / planetCount) * (sunTeeth + planetTeeth) <= planetTeeth + 2.1) {
+    throw new Error(
+      `planetaryDriveRig: adjacent planets collide for sunTeeth=${sunTeeth}, planetTeeth=${planetTeeth}, planetCount=${planetCount}`,
+    );
+  }
+
+  const ringTeeth = sunTeeth + 2 * planetTeeth;
+  const rSun = 0.5 * mod * sunTeeth;
+  const rPlanet = 0.5 * mod * planetTeeth;
+  const rCarrier = rSun + rPlanet;
+  const rRing = 0.5 * mod * ringTeeth;
+
+  const uv = opts.uvScale ?? Math.max(faceWidth * 2.5, rRing * 0.7);
+  const gearBevel = Math.min(0.8, mod * 0.14, faceWidth * 0.12);
+
+  // Assembly-condition orbit angles so every planet simultaneously indexes Sun and internal Ring teeth
+  const orbitAngles = [];
+  const totalMeshIndex = 2 * (sunTeeth + planetTeeth);
+  for (let k = 0; k < planetCount; k++) {
+    const mk = Math.round((k * totalMeshIndex) / planetCount);
+    orbitAngles.push((Math.PI * mk) / (sunTeeth + planetTeeth));
+  }
+  for (let k = 0; k < planetCount; k++) {
+    const a0 = orbitAngles[k];
+    const a1 = k + 1 < planetCount ? orbitAngles[k + 1] : orbitAngles[0] + Math.PI * 2;
+    const chord = 2 * rCarrier * Math.sin((a1 - a0) * 0.5);
+    if (chord <= 2 * (rPlanet + 0.92 * mod)) {
+      throw new Error(
+        `planetaryDriveRig: quantized planet spacing collides for sunTeeth=${sunTeeth}, planetTeeth=${planetTeeth}, planetCount=${planetCount}`,
+      );
+    }
+  }
+
+  const group = new THREE.Group();
+  const ringGroup = new THREE.Group();
+  const sunGroup = new THREE.Group();
+  const carrierGroup = new THREE.Group();
+  group.add(ringGroup, sunGroup, carrierGroup);
+
+  const detailMeshes = [];
+
+  // 1. Sun gear + splined input hub collar
+  const rSunShaft = Math.max(mod * 1.1, rSun * 0.30);
+  const sunPhi0 = -0.475 * ((Math.PI * 2) / sunTeeth);
+  const sunGearGeo = gearGeometry({
+    teeth: sunTeeth,
+    rOut: rSun + 0.90 * mod,
+    rRoot: Math.max(rSunShaft * 1.32, rSun - 1.15 * mod),
+    width: faceWidth,
+    helix,
+    holeR: rSunShaft,
+    lighteningHoles: sunTeeth >= 14 ? lighteningHoles : 0,
+    bevel: gearBevel,
+    uvScale: uv,
+  });
+  sunGearGeo.rotateZ(sunPhi0);
+  const sunGearMesh = makeShadowMesh(sunGearGeo, sunMat);
+  const sunHubGeo = buildBushingZGeometry(
+    rSunShaft * 0.58,
+    rSunShaft * 1.02,
+    rSunShaft * 1.38,
+    faceWidth * 1.48,
+    uv,
+  );
+  const sunHubMesh = makeShadowMesh(sunHubGeo, pinMat);
+  sunGroup.add(sunGearMesh, sunHubMesh);
+  detailMeshes.push(sunHubMesh);
+
+  // 2. Internal Ring Annulus + perimeter mounting bolts
+  const rRingTip = rRing - 0.90 * mod;
+  const rRingRoot = rRing + 1.15 * mod;
+  const rHousingOut = rRingRoot + Math.max(mod * 2.6, rRing * 0.14);
+  const ringLugCount = Math.max(6, planetCount * 2);
+  const ringLugR = Math.max(mod * 1.8, rRing * 0.08);
+  const ringBoltR = Math.min(ringLugR * 0.34, faceWidth * 0.22);
+  // Phase-align internal ring tooth/valley with planet 0 outer mesh along +X
+  const daRing = (Math.PI * 2) / ringTeeth;
+  const ringPhase0 = (planetTeeth % 2 === 0 ? -0.475 : -0.975) * daRing;
+  const ringWidth = faceWidth * 1.08;
+
+  const ringGeo = buildInternalRingGearGeometry({
+    teeth: ringTeeth,
+    rTip: rRingTip,
+    rRoot: rRingRoot,
+    rOuter: rHousingOut,
+    lugCount: ringLugCount,
+    lugRadius: ringLugR,
+    boltRadius: ringBoltR * 0.85,
+    width: ringWidth,
+    helix: -helix,
+    bevel: gearBevel,
+    phaseOffset: ringPhase0,
+    uvScale: uv,
+  });
+  const ringMesh = makeShadowMesh(ringGeo, ringMat);
+  ringGroup.add(ringMesh);
+
+  const ringBoltGeo = normalizeGeometryUVs(
+    boltGeometry({ r: ringBoltR, h: ringBoltR * 1.4, washer: true }).rotateX(Math.PI / 2),
+    uv,
+  );
+  const ringBolts = [];
+  const rBoltCircle = rHousingOut + ringLugR * 0.38;
+  const ringBoltBaseZ = ringWidth * 0.5 + ringBoltR * 0.45;
+  for (let i = 0; i < ringLugCount; i++) {
+    const a = (i * Math.PI * 2) / ringLugCount;
+    const bm = makeShadowMesh(ringBoltGeo, pinMat);
+    bm.position.set(Math.cos(a) * rBoltCircle, Math.sin(a) * rBoltCircle, ringBoltBaseZ);
+    ringGroup.add(bm);
+    ringBolts.push(bm);
+    detailMeshes.push(bm);
+  }
+
+  // 3. Shared Planet Gear, Pin, and Bushing geometries + Carrier Cage
+  const rPlanetPin = Math.max(mod * 0.65, rPlanet * 0.24);
+  const planetGearGeo = gearGeometry({
+    teeth: planetTeeth,
+    rOut: rPlanet + 0.90 * mod,
+    rRoot: Math.max(rPlanetPin * 1.55, rPlanet - 1.15 * mod),
+    width: faceWidth * 0.96,
+    helix: -helix,
+    holeR: rPlanetPin * 1.28,
+    lighteningHoles: planetTeeth >= 14 ? Math.min(lighteningHoles, 5) : 0,
+    bevel: gearBevel,
+    uvScale: uv,
+  });
+
+  const plateThick = Math.max(mod * 0.85, faceWidth * 0.22);
+  const carrierZ = faceWidth * 0.56 + plateThick * 0.55;
+  const pinTotalLen = (carrierZ + plateThick * 0.65) * 2;
+  const planetPinGeo = buildSteppedPinZGeometry(
+    rPlanetPin,
+    pinTotalLen,
+    rPlanetPin * 1.42,
+    plateThick * 0.45,
+    uv,
+  );
+  const planetBushingGeo = buildBushingZGeometry(
+    rPlanetPin * 1.01,
+    rPlanetPin * 1.26,
+    rPlanetPin * 1.52,
+    faceWidth * 1.02,
+    uv,
+  );
+  const pinCapGeo = normalizeGeometryUVs(
+    boltGeometry({ r: rPlanetPin * 0.78, h: rPlanetPin * 0.95, washer: true }).rotateX(Math.PI / 2),
+    uv,
+  );
+
+  const carrierPlateGeo = buildCarrierCagePlateGeometry(
+    rCarrier,
+    Math.min(rCarrier - rPlanetPin * 2.2, Math.max(rSunShaft * 1.65, rSun * 0.52)),
+    orbitAngles,
+    rPlanetPin * 1.02,
+    Math.max(rPlanetPin * 2.1, rPlanet * 0.52),
+    plateThick,
+    gearBevel * 0.85,
+    uv,
+  );
+  const carrierRearPlate = makeShadowMesh(carrierPlateGeo, carrierMat);
+  const carrierFrontCage = makeShadowMesh(carrierPlateGeo, carrierMat);
+  carrierRearPlate.position.z = -carrierZ;
+  carrierFrontCage.position.z = carrierZ;
+  carrierGroup.add(carrierRearPlate, carrierFrontCage);
+
+  const daPlanet = (Math.PI * 2) / planetTeeth;
+  const planets = [];
+  for (let k = 0; k < planetCount; k++) {
+    const betaK = orbitAngles[k];
+    const phiPK = Math.PI - 0.975 * daPlanet + betaK * (sunTeeth / planetTeeth);
+
+    const pNode = new THREE.Group();
+    pNode.rotation.z = betaK;
+    pNode.position.set(Math.cos(betaK) * rCarrier, Math.sin(betaK) * rCarrier, 0);
+
+    const gMesh = makeShadowMesh(planetGearGeo, gearMat);
+    gMesh.rotation.z = phiPK;
+    const pMesh = makeShadowMesh(planetPinGeo, pinMat);
+    const bMesh = makeShadowMesh(planetBushingGeo, pinMat);
+    const capMesh = makeShadowMesh(pinCapGeo, pinMat);
+    capMesh.position.z = carrierZ + plateThick * 0.5 + rPlanetPin * 0.45;
+
+    pNode.add(gMesh, pMesh, bMesh, capMesh);
+    carrierGroup.add(pNode);
+    detailMeshes.push(bMesh, capMesh);
+
+    planets.push({
+      group: pNode,
+      gearMesh: gMesh,
+      pinMesh: pMesh,
+      bushingMesh: bMesh,
+      capMesh,
+      orbitAngle: betaK,
+      cosB: Math.cos(betaK),
+      sinB: Math.sin(betaK),
+      phaseOffset: phiPK,
+    });
+  }
+
+  const denom = 2 * (sunTeeth + planetTeeth);
+  const sunOverPlanet = sunTeeth / planetTeeth;
+  const ratios = Object.freeze({
+    sunTeeth,
+    planetTeeth,
+    ringTeeth,
+    planetCount,
+    sunToCarrier: sunTeeth / denom,
+    ringToCarrier: ringTeeth / denom,
+    fixedRingReduction: denom / sunTeeth,
+    planetToSunRelCarrier: -sunOverPlanet,
+  });
+
+  const _state = {
+    sunAngle: 0,
+    carrierAngle: 0,
+    planetLocalAngle: 0,
+    ringAngle: 0,
+  };
+
+  function update(uOpts = EMPTY_UPDATE_OPTS) {
+    const inputAngle = uOpts.inputAngle ?? 0;
+    const ringAngle = uOpts.ringAngle ?? 0;
+    const ex = smootherstep(0, 1, clamp(uOpts.explode ?? 0, 0, 1));
+
+    const carrierAngle = (sunTeeth * inputAngle + ringTeeth * ringAngle) / denom;
+    const planetLocalAngle = -(inputAngle - carrierAngle) * sunOverPlanet;
+
+    ringGroup.rotation.z = ringAngle;
+    sunGroup.rotation.z = inputAngle;
+    carrierGroup.rotation.z = carrierAngle;
+
+    // Coaxial + radial teardown staging
+    carrierRearPlate.position.z = -carrierZ - 1.60 * faceWidth * ex;
+    carrierFrontCage.position.z = carrierZ + 2.70 * faceWidth * ex;
+    sunGroup.position.z = 1.85 * faceWidth * ex;
+    sunHubMesh.position.z = 0.45 * faceWidth * ex;
+
+    const rOrbitEx = rCarrier + 0.30 * rPlanet * ex;
+    const zGearEx = 0.75 * faceWidth * ex;
+    const zBushEx = 1.10 * faceWidth * ex;
+    const zPinEx = 1.55 * faceWidth * ex;
+    const zCapEx = carrierZ + plateThick * 0.5 + rPlanetPin * 0.45 + 3.05 * faceWidth * ex;
+
+    for (let k = 0; k < planets.length; k++) {
+      const pl = planets[k];
+      pl.group.position.set(pl.cosB * rOrbitEx, pl.sinB * rOrbitEx, 0);
+      pl.gearMesh.rotation.z = pl.phaseOffset + planetLocalAngle;
+      pl.gearMesh.position.z = zGearEx;
+      pl.bushingMesh.position.z = zBushEx;
+      pl.pinMesh.position.z = zPinEx;
+      pl.capMesh.position.z = zCapEx;
+    }
+
+    const boltExZ = ringBoltBaseZ + 0.55 * faceWidth * ex;
+    for (let i = 0; i < ringBolts.length; i++) {
+      ringBolts[i].position.z = boltExZ;
+    }
+
+    _state.sunAngle = inputAngle;
+    _state.carrierAngle = carrierAngle;
+    _state.planetLocalAngle = planetLocalAngle;
+    _state.ringAngle = ringAngle;
+    return _state;
+  }
+
+  update(EMPTY_UPDATE_OPTS);
+
+  return {
+    group,
+    sunGroup,
+    carrierGroup,
+    ringGroup,
+    ringMesh,
+    planets,
+    detailMeshes,
+    ratios,
+    update,
+  };
+}
+
+function makeRadialStadiumHoleCW(angle, rMin, rMax, halfWidth) {
+  const p = new THREE.Path();
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const toXY = (u, v) => [u * c - v * s, u * s + v * c];
+  const arcSeg = 10;
+
+  const [x0, y0] = toXY(rMin, halfWidth);
+  p.moveTo(x0, y0);
+  const [x1, y1] = toXY(rMax, halfWidth);
+  p.lineTo(x1, y1);
+
+  for (let i = 1; i <= arcSeg; i++) {
+    const a = Math.PI * 0.5 - (i / arcSeg) * Math.PI;
+    const [x, y] = toXY(rMax + Math.cos(a) * halfWidth, Math.sin(a) * halfWidth);
+    p.lineTo(x, y);
+  }
+  const [x2, y2] = toXY(rMin, -halfWidth);
+  p.lineTo(x2, y2);
+
+  for (let i = 1; i <= arcSeg; i++) {
+    const a = -Math.PI * 0.5 - (i / arcSeg) * Math.PI;
+    const [x, y] = toXY(rMin + Math.cos(a) * halfWidth, Math.sin(a) * halfWidth);
+    p.lineTo(x, y);
+  }
+  p.closePath();
+  return p;
+}
+
+function buildSlottedSyncRingGeometry({
+  rInner,
+  rOuter,
+  teeth,
+  toothDepth,
+  bladeCount,
+  slotRMin,
+  slotRMax,
+  slotHalfWidth,
+  thick,
+  bevel,
+  uvScale,
+}) {
+  const sh = new THREE.Shape();
+  const n = Math.max(96, teeth * 8);
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const wave = 0.5 + 0.5 * Math.cos(a * teeth);
+    const rr = rOuter * (1 - toothDepth * (1 - Math.min(1, wave * 2.2)));
+    const x = Math.cos(a) * rr;
+    const y = Math.sin(a) * rr;
+    if (i === 0) sh.moveTo(x, y);
+    else sh.lineTo(x, y);
+  }
+  sh.closePath();
+
+  const innerHole = new THREE.Path();
+  innerHole.absarc(0, 0, rInner, 0, Math.PI * 2, true);
+  sh.holes.push(innerHole);
+
+  for (let i = 0; i < bladeCount; i++) {
+    const theta = (i * Math.PI * 2) / bladeCount;
+    sh.holes.push(makeRadialStadiumHoleCW(theta, slotRMin, slotRMax, slotHalfWidth));
+  }
+
+  return extrudeCenteredZ(sh, thick, bevel, 24, uvScale);
+}
+
+function buildIrisBladeGeometry({ bladeLen, rootRadius, tipRadius, camX, camY, rBore, thick, bevel, uvScale }) {
+  const sh = new THREE.Shape();
+  const lugR = Math.max(rootRadius, Math.hypot(camX, camY) + rootRadius * 0.72);
+  const steps = 16;
+
+  // Crescent metering vane from hinge/cam root lug (0,0) inward to (-bladeLen, 0)
+  sh.moveTo(lugR * 0.85, -lugR * 0.45);
+  for (let i = 0; i <= steps; i++) {
+    const u = i / steps;
+    const a = -0.48 + u * (Math.PI * 0.92);
+    sh.lineTo(Math.cos(a) * lugR, Math.sin(a) * lugR);
+  }
+  // Curved outer spine toward tip (-bladeLen, 0)
+  sh.quadraticCurveTo(-bladeLen * 0.48, lugR * 1.08, -bladeLen + tipRadius * 0.4, tipRadius);
+  sh.quadraticCurveTo(-bladeLen - tipRadius * 0.35, 0, -bladeLen + tipRadius * 0.4, -tipRadius * 0.65);
+  // Concave inner metering edge back to root lug
+  sh.quadraticCurveTo(-bladeLen * 0.45, -lugR * 0.18, lugR * 0.85, -lugR * 0.45);
+  sh.closePath();
+
+  if (rBore > 0) {
+    const hole = new THREE.Path();
+    hole.absarc(0, 0, Math.min(rBore, lugR * 0.45), 0, Math.PI * 2, true);
+    sh.holes.push(hole);
+  }
+
+  return extrudeCenteredZ(sh, thick, bevel, 20, uvScale);
+}
+
+function buildAnnularRingGeometry(rInner, rOuter, boltCount, rBoltHole, thick, bevel, uvScale) {
+  const sh = new THREE.Shape();
+  sh.absarc(0, 0, rOuter, 0, Math.PI * 2, false);
+  const hole = new THREE.Path();
+  hole.absarc(0, 0, rInner, 0, Math.PI * 2, true);
+  sh.holes.push(hole);
+  if (boltCount > 0 && rBoltHole > 0) {
+    const rMid = (rInner + rOuter) * 0.5;
+    for (let i = 0; i < boltCount; i++) {
+      const a = ((i + 0.5) * Math.PI * 2) / boltCount;
+      const bh = new THREE.Path();
+      bh.absarc(Math.cos(a) * rMid, Math.sin(a) * rMid, rBoltHole, 0, Math.PI * 2, true);
+      sh.holes.push(bh);
+    }
+  }
+  return extrudeCenteredZ(sh, thick, bevel, 40, uvScale);
+}
+
+/**
+ * Master Slotted Actuator Sync-Ring + Pin-in-Slot Shingled Aperture / Vectoring Rig (`syncIrisRig`).
+ * Uses $C_N$-symmetric helical shingling (`bladeTiltNode`) so adjacent blades never Z-fight at any
+ * aperture, and drives `syncRing` by exact cam-pin-in-radial-slot kinematics (`0.000` lateral slot error).
+ */
+export function syncIrisRig(opts) {
+  need('syncIrisRig', opts, [
+    'rInner',
+    'rOuter',
+    'bladeCount',
+    'bladeThick',
+    'ringMat',
+    'bladeMat',
+    'pinMat',
+  ]);
+
+  const { rInner, rOuter, bladeCount, bladeThick, ringMat, bladeMat, pinMat } = opts;
+  const housingMat = opts.housingMat ?? ringMat;
+  const coneAngle = opts.coneAngle ?? 0;
+
+  if (!(rInner > 0) || !Number.isFinite(rInner)) throw new Error('syncIrisRig: rInner must be > 0');
+  if (!(rOuter > rInner) || !Number.isFinite(rOuter)) throw new Error('syncIrisRig: rOuter must be > rInner');
+  if (!Number.isInteger(bladeCount) || bladeCount < 3) {
+    throw new Error(`syncIrisRig: bladeCount (${bladeCount}) must be an integer >= 3`);
+  }
+  if (!(bladeThick > 0) || !Number.isFinite(bladeThick)) throw new Error('syncIrisRig: bladeThick must be > 0');
+
+  const dR = rOuter - rInner;
+  const rOpen = opts.rOpen !== undefined ? opts.rOpen : rOuter - 0.22 * dR;
+  if (!(rOpen >= rInner) || !(rOpen < rOuter) || !Number.isFinite(rOpen)) {
+    throw new Error(`syncIrisRig: rOpen (${rOpen}) must satisfy rInner <= rOpen < rOuter`);
+  }
+
+  const uv = opts.uvScale ?? Math.max(bladeThick * 4, rOuter * 0.65);
+  const bevel = Math.min(bladeThick * 0.14, dR * 0.015);
+
+  // Hinge circle & exact Law-of-Cosines metering blade chord Lb
+  const rHinge = rOuter - 0.10 * dR;
+  const bladeLen = (rHinge - rInner) + Math.min(0.45 * rInner, 0.35 * dR);
+
+  const psiForRadius = (r) =>
+    Math.acos(clamp((rHinge * rHinge + bladeLen * bladeLen - r * r) / (2 * rHinge * bladeLen), -1, 1));
+  const psiClosed = psiForRadius(rInner);
+  const psiOpen = psiForRadius(rOpen);
+  const psiMid = 0.5 * (psiClosed + psiOpen);
+
+  // Cam pin lever arm centered symmetrically around psiMid for strictly monotonic syncRing rotation
+  const sectorArc = (2 * Math.PI * rHinge) / bladeCount;
+  const rPin = Math.min(0.022 * dR, sectorArc * 0.068, bladeThick * 0.85);
+  const eArm = Math.min(0.085 * dR, sectorArc * 0.28);
+  const alpha0 = -psiMid;
+
+  // Sweep radial envelope [rPinMin, rPinMax] across [psiClosed, psiOpen] so stadium slot fits tightly
+  let rPinMin = Infinity;
+  let rPinMax = 0;
+  for (let i = 0; i <= 32; i++) {
+    const psi = lerp(psiClosed, psiOpen, i / 32);
+    const px = rHinge - eArm * Math.cos(alpha0 + psi);
+    const py = -eArm * Math.sin(alpha0 + psi);
+    const rp = Math.hypot(px, py);
+    if (rp < rPinMin) rPinMin = rp;
+    if (rp > rPinMax) rPinMax = rp;
+  }
+
+  // Cyclic helical shingle angle (eliminates coplanar Z-fighting across all apertures with C_N symmetry)
+  const sinSector = Math.max(0.15, Math.sin((Math.PI * 2) / bladeCount));
+  const shingleRatio = clamp((1.35 * bladeThick) / Math.max(1e-5, dR * sinSector), 0.025, 0.15);
+  const gammaShingle = Math.asin(shingleRatio);
+  const tipLift = bladeLen * Math.sin(gammaShingle);
+
+  const ringThick = Math.max(bladeThick * 1.45, dR * 0.045);
+  const housingRIn = Math.min(rHinge - rPin * 2.8, rOuter - 0.20 * dR);
+  const syncRIn = Math.max(rInner * 0.92, rPinMin - rPin * 3.1);
+  const syncROut = rOuter + 0.032 * dR;
+
+  const group = new THREE.Group();
+  const rotorGroup = new THREE.Group();
+  group.add(rotorGroup);
+
+  const detailMeshes = [];
+
+  // 1. Stationary outer housingRing (at z = -ringThick * 0.55)
+  const housingBaseZ = -ringThick * 0.55;
+  const syncBaseZ = -ringThick * 1.72;
+  const bladeBaseZ = bladeThick * 0.65;
+  const bezelBaseZ = bladeBaseZ + tipLift + bladeThick * 0.95 + ringThick * 0.45;
+
+  const boltR = Math.min(rPin * 0.92, (rOuter - housingRIn) * 0.18);
+  const housingGeo = buildAnnularRingGeometry(
+    housingRIn,
+    rOuter,
+    bladeCount,
+    boltR * 0.82,
+    ringThick,
+    bevel,
+    uv,
+  );
+  const housingRing = makeShadowMesh(housingGeo, housingMat);
+  housingRing.position.z = housingBaseZ;
+  rotorGroup.add(housingRing);
+
+  // 2. Master slotted actuator syncRing (rotates by syncAngle!)
+  const syncGeo = buildSlottedSyncRingGeometry({
+    rInner: syncRIn,
+    rOuter: syncROut,
+    teeth: Math.max(24, bladeCount * 4),
+    toothDepth: Math.min(0.032, (0.026 * dR) / syncROut),
+    bladeCount,
+    slotRMin: rPinMin - rPin * 1.38,
+    slotRMax: rPinMax + rPin * 1.38,
+    slotHalfWidth: rPin * 1.18,
+    thick: ringThick * 0.92,
+    bevel,
+    uvScale: uv,
+  });
+  const syncRing = makeShadowMesh(syncGeo, ringMat);
+  syncRing.position.z = syncBaseZ;
+  rotorGroup.add(syncRing);
+
+  // 3. Front counterbored retainer bezel + perimeter bolts
+  const bezelGeo = buildAnnularRingGeometry(
+    Math.max(housingRIn, rOpen + 0.015 * dR),
+    rOuter,
+    bladeCount,
+    boltR * 0.82,
+    ringThick * 0.72,
+    bevel,
+    uv,
+  );
+  const retainerBezel = makeShadowMesh(bezelGeo, housingMat);
+  retainerBezel.position.z = bezelBaseZ;
+  rotorGroup.add(retainerBezel);
+
+  const bezelBoltGeo = normalizeGeometryUVs(
+    boltGeometry({ r: boltR, h: boltR * 1.35, washer: true }).rotateX(Math.PI / 2),
+    uv,
+  );
+  const bezelBolts = [];
+  const rBezelBolt = (Math.max(housingRIn, rOpen + 0.015 * dR) + rOuter) * 0.5;
+  const boltBaseZ = bezelBaseZ + ringThick * 0.36 + boltR * 0.4;
+  for (let i = 0; i < bladeCount; i++) {
+    const a = ((i + 0.5) * Math.PI * 2) / bladeCount;
+    const bm = makeShadowMesh(bezelBoltGeo, pinMat);
+    bm.position.set(Math.cos(a) * rBezelBolt, Math.sin(a) * rBezelBolt, boltBaseZ);
+    rotorGroup.add(bm);
+    bezelBolts.push(bm);
+    detailMeshes.push(bm);
+  }
+
+  // 4. Shared Blade, Fixed Hinge Pin, and Cam Follower Pin geometries
+  const camLocalX = -eArm * Math.cos(alpha0);
+  const camLocalY = -eArm * Math.sin(alpha0);
+  const bladeGeo = buildIrisBladeGeometry({
+    bladeLen,
+    rootRadius: rPin * 2.1,
+    tipRadius: Math.max(rPin * 1.25, dR * 0.032),
+    camX: camLocalX,
+    camY: camLocalY,
+    rBore: rPin * 1.02,
+    thick: bladeThick,
+    bevel: bevel * 0.75,
+    uvScale: uv,
+  });
+
+  const hingePinLen = bezelBaseZ - housingBaseZ;
+  const hingePinGeo = buildSteppedPinZGeometry(rPin, hingePinLen, rPin * 1.38, rPin * 0.45, uv);
+  const camPinLen = bladeBaseZ - syncBaseZ + ringThick * 0.45;
+  const camPinGeo = buildSteppedPinZGeometry(rPin * 0.96, camPinLen, rPin * 1.32, rPin * 0.42, uv);
+
+  const blades = [];
+  for (let i = 0; i < bladeCount; i++) {
+    const thetaI = (i * Math.PI * 2) / bladeCount;
+    const hingeGroup = new THREE.Group();
+    hingeGroup.position.set(Math.cos(thetaI) * rHinge, Math.sin(thetaI) * rHinge, bladeBaseZ);
+    hingeGroup.rotation.z = thetaI;
+
+    const hingePin = makeShadowMesh(hingePinGeo, pinMat);
+    hingePin.position.z = (housingBaseZ + bezelBaseZ) * 0.5 - bladeBaseZ;
+    hingeGroup.add(hingePin);
+
+    const pivotGroup = new THREE.Group();
+    hingeGroup.add(pivotGroup);
+
+    const camPin = makeShadowMesh(camPinGeo, pinMat);
+    camPin.position.set(camLocalX, camLocalY, -camPinLen * 0.46);
+    pivotGroup.add(camPin);
+
+    // Cyclic shingle tilt around local +Y raises (-bladeLen, 0, 0) cleanly to +Z (+ coneAngle nozzle cant)
+    const bladeTiltNode = new THREE.Group();
+    bladeTiltNode.rotation.set(0, -(gammaShingle + coneAngle), 0);
+    pivotGroup.add(bladeTiltNode);
+
+    const bladeMesh = makeShadowMesh(bladeGeo, bladeMat);
+    bladeTiltNode.add(bladeMesh);
+
+    rotorGroup.add(hingeGroup);
+    detailMeshes.push(hingePin, camPin);
+
+    blades.push({
+      hingeGroup,
+      pivotGroup,
+      bladeTiltNode,
+      bladeMesh,
+      camPin,
+      hingePin,
+      sectorAngle: thetaI,
+    });
+  }
+
+  const axialSpread = Math.max(ringThick * 2.4, dR * 0.24);
+  const _state = {
+    currentRadius: 0,
+    syncAngle: 0,
+    bladeAngle: 0,
+  };
+
+  function update(uOpts = EMPTY_UPDATE_OPTS) {
+    const a = clamp(uOpts.aperture ?? 0.5, 0, 1);
+    const spin = uOpts.spin ?? 0;
+    const ex = smootherstep(0, 1, clamp(uOpts.explode ?? 0, 0, 1));
+
+    const currentRadius = lerp(rInner, rOpen, a);
+    const psi = psiForRadius(currentRadius);
+    const px = rHinge - eArm * Math.cos(alpha0 + psi);
+    const py = -eArm * Math.sin(alpha0 + psi);
+    const phiSync = Math.atan2(py, px);
+
+    rotorGroup.rotation.z = spin;
+    syncRing.rotation.z = phiSync;
+
+    // Axial stage separation on explode
+    syncRing.position.z = syncBaseZ - axialSpread * 1.15 * ex;
+    housingRing.position.z = housingBaseZ;
+    retainerBezel.position.z = bezelBaseZ + axialSpread * 1.35 * ex;
+
+    const bladeExZ = bladeBaseZ + axialSpread * 0.55 * ex;
+    for (let i = 0; i < blades.length; i++) {
+      const bl = blades[i];
+      bl.pivotGroup.rotation.z = psi;
+      bl.hingeGroup.position.z = bladeExZ;
+      bl.hingePin.position.z = (housingBaseZ + bezelBaseZ) * 0.5 - bladeBaseZ + axialSpread * 0.35 * ex;
+    }
+
+    const boltExZ = boltBaseZ + axialSpread * 1.65 * ex;
+    for (let i = 0; i < bezelBolts.length; i++) {
+      bezelBolts[i].position.z = boltExZ;
+    }
+
+    _state.currentRadius = currentRadius;
+    _state.syncAngle = phiSync;
+    _state.bladeAngle = psi;
+    return _state;
+  }
+
+  update(EMPTY_UPDATE_OPTS);
+
+  return {
+    group,
+    rotorGroup,
+    housingRing,
+    syncRing,
+    blades,
+    detailMeshes,
+    update,
+  };
+}
+
+function buildForgedYokeGeometry(spanR, zReach, width, thick, rPinBore, rFlangeOut, bevel, uvScale) {
+  const ht = Math.min(Math.max(thick * 0.52, rPinBore * 1.35), spanR * 0.44);
+  const vIn = spanR - ht;
+  const vOut = spanR + ht;
+  const boreR = Math.min(rPinBore * 1.02, ht * 0.76);
+  const crownBack = -zReach - thick;
+
+  // 2D U-profile in (u = Z, v = Y), extruded along X by `width` via rotateY(-pi/2)
+  const sh = new THREE.Shape();
+  sh.moveTo(crownBack, vOut);
+  sh.lineTo(0, vOut);
+  sh.absarc(0, spanR, ht, Math.PI * 0.5, -Math.PI * 0.5, true);
+  sh.lineTo(-zReach + ht * 0.65, vIn);
+  sh.quadraticCurveTo(-zReach, vIn, -zReach, vIn * 0.55);
+  sh.lineTo(-zReach, -vIn * 0.55);
+  sh.quadraticCurveTo(-zReach, -vIn, -zReach + ht * 0.65, -vIn);
+  sh.lineTo(0, -vIn);
+  sh.absarc(0, -spanR, ht, Math.PI * 0.5, -Math.PI * 0.5, true);
+  sh.lineTo(crownBack, -vOut);
+  sh.closePath();
+
+  const holeTop = new THREE.Path();
+  holeTop.absarc(0, spanR, boreR, 0, Math.PI * 2, true);
+  const holeBot = new THREE.Path();
+  holeBot.absarc(0, -spanR, boreR, 0, Math.PI * 2, true);
+  sh.holes.push(holeTop, holeBot);
+
+  const archGeo = extrudeCenteredZ(sh, width, bevel, 24, uvScale);
+  archGeo.rotateY(-Math.PI / 2);
+
+  // Rear cylindrical mounting flange collar along -Z
+  const flangeThick = thick * 0.85;
+  const flangeGeo = buildAnnularRingGeometry(
+    Math.min(rFlangeOut * 0.42, spanR * 0.45),
+    rFlangeOut,
+    4,
+    Math.min(rPinBore * 0.45, thick * 0.28),
+    flangeThick,
+    bevel * 0.8,
+    uvScale,
+  );
+  flangeGeo.translate(0, 0, crownBack - flangeThick * 0.45);
+
+  return normalizeGeometryUVs(mergeGeometries([archGeo, flangeGeo]), uvScale);
+}
+
+function buildTrunnionCrossGeometry(rOuterY, rInnerX, rPin, hubRadius, uvScale) {
+  const shaftY = new THREE.CylinderGeometry(rPin, rPin, rOuterY * 2, 24);
+  const shaftX = new THREE.CylinderGeometry(rPin, rPin, rInnerX * 2, 24);
+  shaftX.rotateZ(Math.PI / 2);
+
+  const hubThick = Math.max(rPin * 2.5, hubRadius * 0.95);
+  const hubGeo = buildAnnularRingGeometry(
+    Math.min(rPin * 0.85, hubRadius * 0.36),
+    hubRadius,
+    0,
+    0,
+    hubThick,
+    rPin * 0.14,
+    uvScale,
+  );
+
+  return normalizeGeometryUVs(mergeGeometries([shaftY, shaftX, hubGeo]), uvScale);
+}
+
+/**
+ * True 2-Axis Universal Cardan Cross-Yoke Joint + Optional Coil-Spring Damper Struts (`cardanGimbalRig`).
+ * Concentric orthogonal trunnion axes (`crossPivot` yaw around Y, `outputPivot` pitch around local X)
+ * with Hooke's-law `outputSpin` and Euclidean damper compression (`poseCompressedSpring`).
+ */
+export function cardanGimbalRig(opts) {
+  need('cardanGimbalRig', opts, [
+    'radius',
+    'yokeWidth',
+    'yokeThick',
+    'pinRadius',
+    'maxAngle',
+    'yokeMat',
+    'crossMat',
+    'pinMat',
+  ]);
+
+  const {
+    radius,
+    yokeWidth,
+    yokeThick,
+    pinRadius,
+    maxAngle,
+    yokeMat,
+    crossMat,
+    pinMat,
+  } = opts;
+  const damperCount = opts.damperCount ?? 0;
+
+  if (!(radius > 0) || !Number.isFinite(radius)) throw new Error('cardanGimbalRig: radius must be > 0');
+  if (!(yokeWidth > 0) || !Number.isFinite(yokeWidth)) throw new Error('cardanGimbalRig: yokeWidth must be > 0');
+  if (!(yokeThick > 0) || !Number.isFinite(yokeThick)) throw new Error('cardanGimbalRig: yokeThick must be > 0');
+  if (!(pinRadius > 0) || !Number.isFinite(pinRadius)) throw new Error('cardanGimbalRig: pinRadius must be > 0');
+  if (!(maxAngle > 0) || !Number.isFinite(maxAngle)) throw new Error('cardanGimbalRig: maxAngle must be > 0');
+  if (!Number.isInteger(damperCount) || damperCount < 0) {
+    throw new Error(`cardanGimbalRig: damperCount (${damperCount}) must be an integer >= 0`);
+  }
+  if (damperCount > 0) {
+    need('cardanGimbalRig', opts, ['damperRadius', 'springTurns', 'springMat']);
+    if (!(opts.damperRadius > 0) || !Number.isFinite(opts.damperRadius)) {
+      throw new Error('cardanGimbalRig: damperRadius must be > 0');
+    }
+    if (!(opts.springTurns > 0) || !Number.isFinite(opts.springTurns)) {
+      throw new Error('cardanGimbalRig: springTurns must be > 0');
+    }
+  }
+
+  const thetaMax = clamp(maxAngle, 1e-3, 0.82);
+  const uv = opts.uvScale ?? Math.max(yokeThick * 4, radius * 0.75);
+  const bevel = Math.min(yokeThick * 0.12, yokeWidth * 0.08);
+
+  const rIn = radius * 0.85;
+  const zReachOut = radius * 1.18;
+  const zReachIn = radius * 1.06;
+  const rFlangeOut = Math.max(radius * 0.74, yokeWidth * 0.9);
+  const rFlangeIn = Math.max(rIn * 0.74, yokeWidth * 0.86);
+
+  const group = new THREE.Group();
+  const outerYoke = new THREE.Group();
+  const crossPivot = new THREE.Group();
+  const outputPivot = new THREE.Group();
+  const innerYoke = new THREE.Group();
+  const outputSocket = new THREE.Group();
+
+  group.add(outerYoke, crossPivot);
+  crossPivot.add(outputPivot);
+  outputPivot.add(innerYoke, outputSocket);
+
+  const detailMeshes = [];
+
+  // 1. Outer Yoke (opens +Z, Y-axis bearing ears at (0, ±radius, 0))
+  const outerYokeGeo = buildForgedYokeGeometry(
+    radius,
+    zReachOut,
+    yokeWidth,
+    yokeThick,
+    pinRadius,
+    rFlangeOut,
+    bevel,
+    uv,
+  );
+  const outerYokeMesh = makeShadowMesh(outerYokeGeo, yokeMat);
+  outerYoke.add(outerYokeMesh);
+
+  // 2. Inner Yoke (90°-clocked around Z, opens -Z, X-axis bearing ears at (±rIn, 0, 0))
+  const innerYokeGeo = buildForgedYokeGeometry(
+    rIn,
+    zReachIn,
+    yokeWidth * 0.94,
+    yokeThick * 0.94,
+    pinRadius,
+    rFlangeIn,
+    bevel,
+    uv,
+  );
+  innerYokeGeo.rotateY(Math.PI);
+  innerYokeGeo.rotateZ(Math.PI / 2);
+  const innerYokeMesh = makeShadowMesh(innerYokeGeo, yokeMat);
+  innerYoke.add(innerYokeMesh);
+
+  const zOutFlange = zReachIn + yokeThick * 0.94 * 1.85;
+  const zBaseFlange = -(zReachOut + yokeThick * 1.85);
+  outputSocket.position.set(0, 0, zOutFlange);
+
+  // 3. Central Cruciform Trunnion Hub + 4 Journal Bearing Caps
+  const htOut = Math.min(Math.max(yokeThick * 0.52, pinRadius * 1.35), radius * 0.44);
+  const htIn = Math.min(Math.max(yokeThick * 0.94 * 0.52, pinRadius * 1.35), rIn * 0.44);
+  const trunnionGeo = buildTrunnionCrossGeometry(
+    radius + htOut * 0.95,
+    rIn + htIn * 0.95,
+    pinRadius,
+    Math.max(pinRadius * 2.35, radius * 0.34),
+    uv,
+  );
+  const crossHubMesh = makeShadowMesh(trunnionGeo, crossMat);
+  crossPivot.add(crossHubMesh);
+
+  const bearingCapGeoY = normalizeGeometryUVs(
+    boltGeometry({ r: pinRadius * 1.15, h: pinRadius * 1.05, washer: true }),
+    uv,
+  );
+  const bearingCapGeoX = bearingCapGeoY.clone().rotateZ(-Math.PI / 2);
+
+  const capYPos = makeShadowMesh(bearingCapGeoY, pinMat);
+  const capYNeg = makeShadowMesh(bearingCapGeoY, pinMat);
+  capYNeg.rotation.x = Math.PI;
+  outerYoke.add(capYPos, capYNeg);
+
+  const capXPos = makeShadowMesh(bearingCapGeoX, pinMat);
+  const capXNeg = makeShadowMesh(bearingCapGeoX, pinMat);
+  capXNeg.rotation.z = Math.PI;
+  innerYoke.add(capXPos, capXNeg);
+
+  detailMeshes.push(capYPos, capYNeg, capXPos, capXNeg);
+
+  const capYBase = radius + htOut + pinRadius * 0.48;
+  const capXBase = rIn + htIn + pinRadius * 0.48;
+
+  // 4. Optional Coil-Over Damper Struts
+  const dampers = [];
+  if (damperCount > 0) {
+    const { damperRadius, springTurns, springMat } = opts;
+    const rDampOrbit = radius + htOut + damperRadius * 1.65;
+    const zAnchorA = -zReachOut * 0.92;
+    const zAnchorB = zReachIn * 0.92;
+    const restDist = zAnchorB - zAnchorA;
+    const restSpringLen = restDist * 0.64;
+
+    const cylLen = restDist * 0.52;
+    const rodLen = restDist * 0.62;
+    const cylGeo = normalizeGeometryUVs(
+      new THREE.CylinderGeometry(damperRadius * 0.72, damperRadius * 0.76, cylLen, 20).translate(0, cylLen * 0.5 + damperRadius * 0.5, 0),
+      uv,
+    );
+    const rodGeo = normalizeGeometryUVs(
+      new THREE.CylinderGeometry(damperRadius * 0.36, damperRadius * 0.36, rodLen, 16).translate(0, rodLen * 0.5 + damperRadius * 0.5, 0),
+      uv,
+    );
+    const eyeGeo = normalizeGeometryUVs(
+      new THREE.CylinderGeometry(damperRadius * 0.62, damperRadius * 0.62, damperRadius * 0.78, 16).rotateZ(Math.PI / 2),
+      uv,
+    );
+    const seatGeo = normalizeGeometryUVs(
+      new THREE.CylinderGeometry(damperRadius * 1.16, damperRadius * 1.16, damperRadius * 0.28, 20),
+      uv,
+    );
+    const springGeo = normalizeGeometryUVs(
+      helixGeometry({
+        r: damperRadius,
+        wire: damperRadius * 0.16,
+        turns: springTurns,
+        len: restSpringLen,
+        seg: Math.max(96, Math.round(springTurns * 20)),
+      }),
+      uv,
+    );
+
+    for (let k = 0; k < damperCount; k++) {
+      const ang = (k * Math.PI * 2) / damperCount + Math.PI * 0.25;
+      const cosA = Math.cos(ang);
+      const sinA = Math.sin(ang);
+      const ax = cosA * rDampOrbit;
+      const ay = sinA * rDampOrbit;
+
+      const damperGroup = new THREE.Group();
+      const cylinderGroup = new THREE.Group();
+      const rodGroup = new THREE.Group();
+
+      const cylMesh = makeShadowMesh(cylGeo, crossMat);
+      const eyeA = makeShadowMesh(eyeGeo, yokeMat);
+      const seatA = makeShadowMesh(seatGeo, pinMat);
+      seatA.position.y = restDist * 0.18;
+      const springMesh = makeShadowMesh(springGeo, springMat);
+      springMesh.position.y = restDist * 0.18;
+      cylinderGroup.add(cylMesh, eyeA, seatA, springMesh);
+
+      const rodMesh = makeShadowMesh(rodGeo, pinMat);
+      const eyeB = makeShadowMesh(eyeGeo, yokeMat);
+      const seatB = makeShadowMesh(seatGeo, pinMat);
+      seatB.position.y = restDist * 0.18;
+      rodGroup.add(rodMesh, eyeB, seatB);
+
+      damperGroup.add(cylinderGroup, rodGroup);
+      group.add(damperGroup);
+      detailMeshes.push(seatA, seatB);
+
+      dampers.push({
+        group: damperGroup,
+        cylinderGroup,
+        rodGroup,
+        springMesh,
+        ax,
+        ay,
+        az: zAnchorA,
+        bx: ax,
+        by: ay,
+        bz: zAnchorB,
+        cosA,
+        sinA,
+        restDist,
+        restSpringLen,
+      });
+    }
+  }
+
+  void zBaseFlange;
+
+  // Pre-allocated scratch vectors for zero-allocation update()
+  const _aPose = new THREE.Vector3();
+  const _bPose = new THREE.Vector3();
+  const _bDet = new THREE.Vector3();
+  const _dir = new THREE.Vector3();
+  const _negDir = new THREE.Vector3();
+  const _state = {
+    clampedYaw: 0,
+    clampedPitch: 0,
+    outputSpin: 0,
+  };
+
+  function update(uOpts = EMPTY_UPDATE_OPTS) {
+    const clampedYaw = clamp(uOpts.yaw ?? 0, -thetaMax, thetaMax);
+    const clampedPitch = clamp(uOpts.pitch ?? 0, -thetaMax, thetaMax);
+    const inputSpin = uOpts.inputSpin ?? 0;
+    const ex = smootherstep(0, 1, clamp(uOpts.explode ?? 0, 0, 1));
+
+    const cosY = Math.cos(clampedYaw);
+    const sinY = Math.sin(clampedYaw);
+    const cosP = Math.cos(clampedPitch);
+    const sinP = Math.sin(clampedPitch);
+    const cosBeta = cosY * cosP;
+
+    const outputSpin = inputSpin === 0 ? 0 : Math.atan2(Math.sin(inputSpin), Math.cos(inputSpin) * cosBeta);
+
+    crossPivot.rotation.set(0, clampedYaw, 0);
+    outputPivot.rotation.set(clampedPitch, 0, 0);
+    outputSocket.rotation.set(0, 0, outputSpin);
+
+    // Explode staging: radial bearing caps + axial Cardan cross & inner yoke separation
+    const capShift = 0.45 * radius * ex;
+    capYPos.position.set(0, capYBase + capShift, 0);
+    capYNeg.position.set(0, -capYBase - capShift, 0);
+    capXPos.position.set(capXBase + capShift, 0, 0);
+    capXNeg.position.set(-capXBase - capShift, 0, 0);
+
+    crossHubMesh.position.set(0, 0, 0.65 * radius * ex);
+    const innerShiftZ = 1.45 * radius * ex;
+    innerYoke.position.set(0, 0, innerShiftZ);
+    outputSocket.position.set(0, 0, zOutFlange + innerShiftZ);
+
+    if (dampers.length > 0) {
+      const kDet = smootherstep(0, 0.35, ex);
+      const radShift = 0.55 * radius * ex;
+      for (let k = 0; k < dampers.length; k++) {
+        const dm = dampers[k];
+        const rOffX = dm.cosA * radShift;
+        const rOffY = dm.sinA * radShift;
+
+        _aPose.set(dm.ax + rOffX, dm.ay + rOffY, dm.az);
+
+        // Exact Ry(clampedYaw) * Rx(clampedPitch) * [bx, by, bz] in group space
+        const x1 = dm.bx;
+        const y1 = dm.by * cosP - dm.bz * sinP;
+        const z1 = dm.by * sinP + dm.bz * cosP;
+        const x2 = x1 * cosY + z1 * sinY + rOffX;
+        const y2 = y1 + rOffY;
+        const z2 = -x1 * sinY + z1 * cosY;
+
+        _bDet.set(_aPose.x, _aPose.y, _aPose.z + dm.restDist);
+        _bPose.set(lerp(x2, _bDet.x, kDet), lerp(y2, _bDet.y, kDet), lerp(z2, _bDet.z, kDet));
+
+        _dir.subVectors(_bPose, _aPose);
+        const dist = _dir.length();
+        if (dist > 1e-6) {
+          _dir.divideScalar(dist);
+          _negDir.copy(_dir).negate();
+          dm.cylinderGroup.position.copy(_aPose);
+          dm.cylinderGroup.quaternion.setFromUnitVectors(UNIT_Y_AXIS, _dir);
+          dm.rodGroup.position.copy(_bPose);
+          dm.rodGroup.quaternion.setFromUnitVectors(UNIT_Y_AXIS, _negDir);
+          const curSpringLen = Math.max(dm.restSpringLen * 0.2, dist - dm.restDist * 0.36);
+          poseCompressedSpring(dm.springMesh, dm.restSpringLen, curSpringLen);
+        }
+      }
+    }
+
+    _state.clampedYaw = clampedYaw;
+    _state.clampedPitch = clampedPitch;
+    _state.outputSpin = outputSpin;
+    return _state;
+  }
+
+  update(EMPTY_UPDATE_OPTS);
+
+  return {
+    group,
+    outerYoke,
+    crossPivot,
+    outputPivot,
+    innerYoke,
+    outputSocket,
+    dampers,
+    detailMeshes,
+    update,
+  };
+}
+

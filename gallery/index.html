@@ -88,6 +88,11 @@
     <h2>Style · 风格选择</h2>
     <div class="list" id="styles"></div>
 
+    <div id="samples-wrap" style="display:none">
+      <h2>Sample · 样片切换</h2>
+      <div class="list" id="samples"></div>
+    </div>
+
     <h2>Scenes · 场景编排</h2>
     <div class="list" id="scenes"></div>
 
@@ -138,9 +143,30 @@ import { STYLES, SIZES } from './catalog.js';
 const q = new URLSearchParams(location.search);
 const state = {
   style: q.get('style') || STYLES[0].id,
+  sample: q.get('sample') || '',
   scene: q.get('scene') || 'all',
   size: q.get('size') || SIZES[0].id,
 };
+
+function currentStyleObj() {
+  return STYLES.find((s) => s.id === state.style) || STYLES[0];
+}
+
+function currentSampleObj() {
+  const st = currentStyleObj();
+  if (!st.samples || !st.samples.length) return null;
+  return st.samples.find((sp) => sp.id === state.sample) || st.samples[0];
+}
+
+function syncUrlState() {
+  const params = new URLSearchParams();
+  params.set('style', state.style);
+  const sp = currentSampleObj();
+  if (sp && sp.id !== 'nautilus') params.set('sample', sp.id);
+  params.set('scene', state.scene);
+  params.set('size', state.size);
+  history.replaceState(null, '', `?${params}`);
+}
 
 const player = document.getElementById('player');
 const scrubber = document.getElementById('scrubber');
@@ -166,10 +192,15 @@ function renderButtons(host, items, activeId, onClick, labelFn) {
 
 function updateCliCommands() {
   const sceneArg = state.scene !== 'all' ? ` --scene ${state.scene}` : '';
+  const sp = currentSampleObj();
+  const worldArg = sp?.world ? ` --world ${sp.world.replace(/^\//, '')}` : '';
+  const contentArg = sp?.content ? ` --content ${sp.content.replace(/^\//, '')}` : '';
+  const lookArg = sp?.look ? ` --look '${sp.look}'` : '';
+  const outName = sp && sp.id !== 'nautilus' ? sp.id : state.style;
   document.getElementById('cmd-audit').textContent =
-    `node tools/audit.mjs --style ${state.style} --size ${state.size}`;
+    `node tools/audit.mjs --style ${state.style}${worldArg}${contentArg} --size ${state.size}`;
   document.getElementById('cmd-render').textContent =
-    `node tools/render.mjs --style ${state.style}${sceneArg} --size ${state.size} --video <work-dir>/${state.style}.mp4`;
+    `node tools/render.mjs --style ${state.style}${worldArg}${contentArg}${lookArg}${sceneArg} --size ${state.size} --video <work-dir>/${outName}.mp4`;
 }
 
 function renderScenePicker() {
@@ -189,7 +220,7 @@ function renderScenePicker() {
       state.scene = it.id;
       renderScenePicker();
       updateCliCommands();
-      history.replaceState(null, '', `?${new URLSearchParams(state)}`);
+      syncUrlState();
       post({ type: 'scene', value: state.scene });
     },
     (it) => `<span>${it.title}</span><small>${it.sub}</small>`
@@ -216,11 +247,33 @@ function load() {
     state.style,
     (it) => {
       state.style = it.id;
+      state.sample = '';
       state.scene = 'all';
       load();
     },
     (s) => `<span>${s.name}</span><small>${s.zh}</small>`
   );
+
+  const st = currentStyleObj();
+  const samplesWrap = document.getElementById('samples-wrap');
+  const activeSample = currentSampleObj();
+  if (st.samples && st.samples.length) {
+    samplesWrap.style.display = '';
+    renderButtons(
+      document.getElementById('samples'),
+      st.samples,
+      activeSample.id,
+      (sp) => {
+        state.sample = sp.id === st.samples[0].id ? '' : sp.id;
+        state.scene = 'all';
+        load();
+      },
+      (sp) => `<span>${sp.name}</span><small>${sp.zh}</small>`
+    );
+  } else {
+    samplesWrap.style.display = 'none';
+  }
+
   renderButtons(
     document.getElementById('sizes'),
     SIZES,
@@ -232,10 +285,18 @@ function load() {
     (s) => s.name
   );
 
-  const p = new URLSearchParams({ ...state, mode: 'live' });
+  const p = new URLSearchParams({
+    style: state.style,
+    scene: state.scene,
+    size: state.size,
+    mode: 'live',
+  });
+  if (activeSample?.world) p.set('world', activeSample.world);
+  if (activeSample?.content) p.set('content', activeSample.content);
+  if (activeSample?.look) p.set('look', activeSample.look);
   if (document.getElementById('edit').checked) p.set('edit', '1');
   player.src = `player.html?${p}`;
-  history.replaceState(null, '', `?${new URLSearchParams(state)}`);
+  syncUrlState();
   updateCliCommands();
   document.getElementById('params').innerHTML = '<p class="hint">加载中…</p>';
 }

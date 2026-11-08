@@ -1,5 +1,5 @@
 {
-  "index": "../../../out/samples-cache/index.json",
+  "index": "../../.cache/samples/index.json",
   "note": "Recorded one-shots layered over the synthesized `mech` score. Missing cache = pure synthesis, so a fresh clone still renders.",
   "map": {
     "brass_ratchet": { "sample": "ratchet-crank", "gain": 0.9 },

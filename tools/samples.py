@@ -39,7 +39,7 @@ from scipy.io import wavfile
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = Path(__file__).resolve().parent / "samples.manifest.json"
-CACHE = (REPO_ROOT.parent / "out" / "samples-cache").resolve()
+CACHE = (REPO_ROOT / ".cache" / "samples").resolve()
 RAW = CACHE / "raw"
 WAV = CACHE / "wav"
 INDEX = CACHE / "index.json"

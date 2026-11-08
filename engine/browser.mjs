@@ -38,6 +38,17 @@ export const DEFAULT_LAUNCH_ARGS = [
   '--force-color-profile=srgb',
 ];
 
+export const GPU_LAUNCH_ARGS = [
+  '--enable-gpu',
+  '--ignore-gpu-blocklist',
+  '--use-angle=gl',
+];
+
+export function isGpuEnabled() {
+  const v = String(process.env.STYLEHOP_GPU || '').trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+}
+
 export async function getChromium() {
   // PLAYWRIGHT_CORE_PATH lets you reuse a playwright-core install from elsewhere.
   const candidates = [
@@ -59,13 +70,22 @@ export async function getChromium() {
 export async function launchHtmlCanvasBrowser(options = {}) {
   const chromium = await getChromium();
   const executablePath = options.executablePath || CHROME_EXE;
+  const gpuArgs = isGpuEnabled() ? GPU_LAUNCH_ARGS : [];
   const extraArgs = options.args || [];
-  const args = Array.from(new Set([...DEFAULT_LAUNCH_ARGS, ...extraArgs]));
+  const args = Array.from(new Set([...DEFAULT_LAUNCH_ARGS, ...gpuArgs, ...extraArgs]));
+  const env = isGpuEnabled()
+    ? {
+        ...process.env,
+        MESA_D3D12_DEFAULT_ADAPTER_NAME: process.env.MESA_D3D12_DEFAULT_ADAPTER_NAME || 'NVIDIA',
+        ...(options.env || {}),
+      }
+    : options.env;
 
   return chromium.launch({
     ...options,
     executablePath,
     args,
+    ...(env ? { env } : {}),
   });
 }
 

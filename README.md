@@ -6,14 +6,16 @@
 
 ![calibration-lab 多场景样片检视表](styles/calibration-lab/contact_sheet.jpg)
 
-本仓库从 [`stardino-stylehop`](https://github.com/star-dino/stardino-stylehop) 的 `bdf4dfb` 拆出，只保留 `calibration-lab` 一个风格及其运行时依赖，删去了其他风格与多风格框架的残余。默认样片《机械鹦鹉螺》共 5 个场景、26 秒，由 `styles/calibration-lab/world.js` + `sample/` 组成。
+默认样片《机械鹦鹉螺》共 5 个场景、26 秒，由 `styles/calibration-lab/world.js` + `sample/` 组成；同时仓库内置第二套完整重工旗舰样片《深海声学须鲸 Balaenoptera AQ-12》（[`styles/calibration-lab/whale/`](styles/calibration-lab/whale/README.md)，共 5 个场景、7 个镜头、26 秒，支持 `minimal` 标准档与 `kinetic` V10 复杂重工满舱档 `5,632` 内舱零件一键切换）。
 
 ## 它是什么
 
-- **kernel（工具箱）**：`styles/calibration-lab/kernel.js` 提供机器感原语——世界空间剖切（`cutWindow` / `windowRim`）、刻线台面、环组/散热鳍/接缝硬件、材质角色（metal / glaze / liner / emissive）、分阶段爆炸、LOD 与同源仪表 HUD。每个元素都必须带参数，没有默认摆放。
-- **world（一个例子）**：`styles/calibration-lab/world.js` + `sample/`（GLB 外壳、运动学、配色、teardown kit 兼容层）是机械鹦鹉螺的具体编排，不是模板。
+- **kernel（工具箱）**：`styles/calibration-lab/kernel.js` 提供机器感原语——世界空间剖切（`cutWindow` / `windowRim`）、刻线台面、环组/散热鳍/联动机构（四连杆、行星差速轮系、同步光圈、正交十字万向节）、材质角色（metal / glaze / liner / emissive）、分阶段爆炸、LOD 与同源仪表 HUD。每个元素都必须带参数，没有默认摆放。
+- **world（双样片示例）**：
+  - `styles/calibration-lab/world.js` + `sample/`（GLB 外壳、运动学、配色、teardown kit 兼容层）：默认样片《机械鹦鹉螺》。
+  - [`styles/calibration-lab/whale/`](styles/calibration-lab/whale/README.md)：重工多级拆解样片《深海声学须鲸 Balaenoptera AQ-12》，展示 `resolveMechProfile` 双档参数化体系（`minimal` 标准档 vs `kinetic` 复杂档 `5,632` 件三层内构）。
 - **规格**：`styles/calibration-lab/SPEC.md`（去固化铁律、API、剖切/爆炸/仪表规则、§9 自检清单与 3D 门禁）。
-- **来历**：`styles/calibration-lab/lineage/mech-nautilus/` 保留机械鹦鹉螺从早期 → 重做 → 迭代的过程图与说明。
+- **来历**：`styles/calibration-lab/lineage/mech-nautilus/` 保留机械鹦鹉螺从早期 → 重做 → 迭代的过程图与说明；[`styles/calibration-lab/lineage/mech-whale/`](styles/calibration-lab/lineage/mech-whale/README.md) 记录深海声学须鲸从 `V1`–`V10` 的演进脉络与双复杂度分档决策。
 - **声音**：`tools/sound.py` 的 `mech` 预设——液压泵/流体床、循环动力冲程、伺服/气阀过渡与机械拟音；无音乐铺底、无高频铃声。`styles/calibration-lab/samples.json` 可把 `brass_ratchet` / `count_tick` / `scale_tilt` / `card_enter` / `layer_float` 叠到 CC0 录音 one-shot 上；缓存缺失时自动纯合成。
 
 ## 快速开始
@@ -24,18 +26,18 @@ npm install                      # 仅依赖 playwright-core
 # 否则自动探测 ~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome
 # 声音与成片还需要 python3（numpy、scipy）与 ffmpeg
 
-npm run init                     # 可选：下载 CC0 采样（VCSL / VSCO-2-CE，sha256 校验）到 ../out/samples-cache/；缺省则声音退回纯合成
+npm run init                     # 可选：下载 CC0 采样（VCSL / VSCO-2-CE，sha256 校验）到 .cache/samples/；缺省则声音退回纯合成
 
 npm run serve                    # Studio：http://127.0.0.1:8080/gallery/
 
 # 体检：运行时报错、文字越界、字号、停留时长、浮层遮挡 + 3D 主体构图（默认 16:9 / 9:16 / 1:1）
 node tools/audit.mjs --style calibration-lab --all-sizes
 
-# 渲染 2×2 检视表（产物放在仓库外的 ../out/ 下）
-node tools/render.mjs --style calibration-lab --sheet ../out/scratch/calibration-lab/sheet.jpg
+# 渲染 2×2 检视表（测试产物放在 out/test/ 下，已由 .gitignore 忽略）
+node tools/render.mjs --style calibration-lab --sheet out/test/scratch/nautilus_sheet.jpg
 
-# 渲染成片（逐帧截图 + 程序化配乐 + loudnorm）
-node tools/render.mjs --style calibration-lab --video ../out/scratch/calibration-lab/calibration-lab.mp4 --fps 30 --workers 4
+# 渲染成片（成品放在 out/products/<slug>/v<N>/ 下）
+node tools/render.mjs --style calibration-lab --video out/products/mech-nautilus/v1/calibration-lab.mp4 --fps 30 --workers 2
 
 # 画面回归：与 styles/calibration-lab/look_baseline.* 对比，有意改动后 --accept
 python3 tools/lookcheck.py --style calibration-lab
@@ -44,11 +46,15 @@ python3 tools/lookcheck.py --style calibration-lab
 node tools/render.mjs --style calibration-lab --world <product>/world.js --storyboard <out>/storyboard.jpg --shots-dir <out>/shots
 python3 tools/lookcheck.py --style calibration-lab --world <product>/world.js --content <product>/scenes.html --gates
 
+# 运行内置第二样片《深海声学须鲸 Balaenoptera AQ-12》（默认 V10 复杂重工档，或加 --look '{"mech":"minimal"}' 切换标准档）
+node tools/audit.mjs --style calibration-lab --world styles/calibration-lab/whale/world.js --content styles/calibration-lab/whale/scenes.html --all-sizes
+node tools/render.mjs --style calibration-lab --world styles/calibration-lab/whale/world.js --content styles/calibration-lab/whale/scenes.html --sheet out/test/scratch/whale_sheet.jpg
+
 # 可选：人声轨（TTS 是构建步骤，默认关闭；依赖见 requirements-voice.txt）
 node tools/render.mjs --style calibration-lab --video <out>.mp4 --voice <dir>/voice.json
 ```
 
-产物一律写到仓库外的 `../out/`（`STYLEHOP_OUT` 可改写）；仓库内不放输出，`.gitignore` 兜底忽略 `/out`。
+本地渲染输出统一归口在 `out/`（分为 `out/test/` 测试与 `out/products/<slug>/v<N>/` 成品两类），非公开决策与计划文档放在 `devdocs/`，两者均在 `.gitignore` 中忽略。
 
 ## 目录
 
@@ -57,18 +63,14 @@ engine/     运行时：stage.js · motion.js · studio3d.js · camera.js · dir
 gallery/    Studio（index.html + player.html + catalog.js，只列 calibration-lab）
 styles/calibration-lab/
             style.js · kernel.js · world.js · scenes.html · theme.css · SPEC.md · ref.json · samples.json
-            contact_sheet.jpg · look_baseline.{jpg,json} · sample/（hull.glb + 运动学/配色/kit-compat） · lineage/mech-nautilus/
+            contact_sheet.jpg · look_baseline.{jpg,json} · sample/（机械鹦鹉螺：hull.glb + 运动学/配色/kit-compat）
+            whale/（深海声学须鲸 AQ-12：V10 5,632 件重工联动 + 标准档双模式 + 剧照与 NOTES.md）
+            lineage/mech-nautilus/ · lineage/mech-whale/
 tools/      audit.mjs · render.mjs · lookcheck.py · sound.py · samples.py · samples.manifest.json · audio_grains.py · textures.py · voice.py · factcheck.mjs
 assets/     textures/brushed_metal.png（台面 `u_paper` 纹理；由 tools/textures.py 生成）
 ```
 
 声音颗粒 `assets/audio/*.wav` 由 `tools/audio_grains.py` 在首次合成时自动生成（被 `.gitignore` 忽略，不入库）。
-
-## 与原仓库的差异
-
-- 删除：其余风格（`ink-wash`、`twilight-fable`、`clay-macaron`、`vintage-naturalist`、模板）、2D 栈（`studio2d`、`puppet2d`、`critter2d`）、其他 pass、其他风格的纹理/合成器/拟音、2D 专属的 lookcheck 覆盖。
-- 保留：calibration-lab 全部代码路径、3D 栈与门禁（`lookcheck --gates`、`render --pair` / `--shots-dir`、`audit --framing-strict`）、默认样片与 `lineage/`、可选 CC0 采样层、`voice.py`（路径改为 `$TTS_HOME`，默认 `~/tts`）。纯合成音轨与原仓库在相同 `PYTHONHASHSEED` 下逐字节一致。
-- 行为变化：无。`gallery/player.html` 保留 `ref.json` 探测（默认样片与产品都可用参考色板）。
 
 ## 许可
 

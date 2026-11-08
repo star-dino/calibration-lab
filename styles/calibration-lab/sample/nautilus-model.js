@@ -1,4 +1,4 @@
-// The Mechanical Nautilus (Archive / 007): clasps seated on the plates (kit seamHardware `surfaces`), a
+// The Mechanical Nautilus (Archive / 007): sunk seam liners along the hull grooves, a
 // staggered teardown order on every hull part, tentacle plate and septum, an orderly full explode that fits one
 // frame and lifts the machine off the floor (camera and timing in film.js).
 // the final cut: the hull re-shaped in Blender (shell plates pushed to a
@@ -39,7 +39,7 @@ import {
 } from './kit-compat.js';
 import { mergeGeometries } from './kit-compat.js';
 import {rng} from './kit-compat.js';
-import {createLod, lerpMaterial, scaleIn} from './kit-compat.js';
+import {createLod, lerpMaterial} from './kit-compat.js';
 import {P, READ, FOCUS} from './palette.js';
 import {G, sampleTentacle, SEPTA_ANGLES, TENTACLE_DEFS} from './kin.js';
 
@@ -553,16 +553,10 @@ export async function buildNautilus({clipPlane, studio} = {}) {
   for (const {mesh, edges} of rimJobs)
     for (const e of edges) mesh.add(windowRim(e, {depth: 0.16, lip: 0.05, wallMat: M.liner, lipMat: READ ? M.aluDark : M.copper, minLength: 0.4}));
 
-  // Seam hardware on both faces of every seam: a copper liner sunk in the groove and clasps across it.
+  // Seam hardware on both faces of every seam: a liner sunk in the groove.
   // Seams crossing the window only get it on their remaining outer part.
-  const claspMat = M.steel;
   const LOD_NEAR = 30.5;
   const LOD_FAR = 33.5;
-  const claspAlt = READ ? M.steel : M.brass;
-  // clasps sit on the plates either side of a seam, not on the groove's ridge (kit seamHardware `surfaces`)
-  hullRoot.updateMatrixWorld(true);
-  const plateMeshes = [];
-  hullRoot.traverse((o) => o.isMesh && /^shell__plate_\d\d$/.test(o.name) && plateMeshes.push(o));
   // the final cut (focus look): detail by camera distance. Full at the close-up distances, none at the hero's.
   const lateDetail = [];
   const seamLod = createLod({near: LOD_NEAR, far: LOD_FAR});
@@ -574,16 +568,15 @@ export async function buildNautilus({clipPlane, studio} = {}) {
       const range = windowed && zSign > 0 ? [WINDOW_R + 0.12, 99] : null;
       const ridge = ridgeLine(m.geometry, {along: (p) => hubR(p.x, p.y), up: new V3(0, 0, zSign), bins: 16, range});
       if (ridge.points.length < 3) continue;
-      // the final cut: one dense area (window + its neighbour seam), the outer shell quiet like the final cut: no clasps, a dark liner
+      // the final cut: one dense area (window + its neighbour seam), the outer shell quiet with a wider dark liner
       const quiet = FOCUS && Number(m.name.slice(-2)) > 5;
-      m.add(seamHardware({...ridge, linerMat: FOCUS ? M.liner : READ ? M.darkGunmetal : M.copper, linerR: quiet ? 0.085 : 0.06, sink: 0.015, claspMat: quiet ? null : claspMat, claspAlt, pitch: FOCUS ? 0.84 : READ ? 1.26 : 0.42, clasp: [0.1, 0.07, 0.32], surfaces: plateMeshes, space: m}));
+      m.add(seamHardware({...ridge, linerMat: FOCUS ? M.liner : READ ? M.darkGunmetal : M.copper, linerR: quiet ? 0.085 : 0.06, sink: 0.015}));
       if (quiet) {
-        // the final cut: the quiet seams earn their small parts as the camera closes in (kit/lod.js): steel clasps grow in and a
+        // the final cut: the quiet seams earn their fine liner highlight as the camera closes in (kit/lod.js): a
         // thin bright steel line rises on the dark liner. Steel/aluminium, never the accent orange.
-        const detail = seamHardware({...ridge, linerMat: seamAccent, linerR: 0.03, sink: -0.045, claspMat, claspAlt, pitch: 0.6, clasp: [0.1, 0.07, 0.32], surfaces: plateMeshes, space: m});
-        const [accent, ...clasps] = detail.children;
-        seamLod.add(scaleIn(clasps));
-        seamLod.add((k) => (accent.visible = k > 0.002));
+        const detail = seamHardware({...ridge, linerMat: seamAccent, linerR: 0.03, sink: -0.045});
+        const [accent] = detail.children;
+        if (accent) seamLod.add((k) => (accent.visible = k > 0.002));
         lateDetail.push([m, detail]); // attached after the teardown vectors are measured (their bounds would shift them)
       }
     }
@@ -625,7 +618,7 @@ export async function buildNautilus({clipPlane, studio} = {}) {
     if (nm.startsWith('shell__plate') || nm.startsWith('shell__seam')) {
       const m = /_(\d+)$/.exec(nm);
       const idx = m ? Number(m[1]) : 5;
-      // plate and its seam move together (the seam carries the clasps), alternate plates a step further
+      // plate and its seam move together (the seam carries the liner), alternate plates a step further
       const rDist = 1.45 + (idx % 2) * 0.45;
       const zStagger = (idx % 2 === 0 ? 1 : -1) * 0.3;
       fullVec = new V3(ux * rDist, uy * rDist * EX_V, zStagger);

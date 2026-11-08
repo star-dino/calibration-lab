@@ -10,6 +10,11 @@ export const STYLES = [
     stageMode: '3d-pure',
     defaultOverlay: 'none',
     kernel: './kernel.js',
+    samples: [
+      { id: 'nautilus', name: 'Mechanical Nautilus', zh: '机械鹦鹉螺 · 默认样片', world: null, content: null },
+      { id: 'whale-v10', name: 'Balaenoptera AQ-12 (V10)', zh: '深海声学须鲸 · 复杂档', world: '/styles/calibration-lab/whale/world.js', content: '/styles/calibration-lab/whale/scenes.html' },
+      { id: 'whale-minimal', name: 'Balaenoptera AQ-12 (Minimal)', zh: '深海声学须鲸 · 标准档', world: '/styles/calibration-lab/whale/world.js', content: '/styles/calibration-lab/whale/scenes.html', look: '{"mech":"minimal"}' },
+    ],
     bestFor: [
       '机械原理 / 结构拆解 / 剖视解释（发动机 / 泵 / 减速箱 / 连杆机构）',
       '工业产品与量具 / 标定与公差 / 制造工艺科普',

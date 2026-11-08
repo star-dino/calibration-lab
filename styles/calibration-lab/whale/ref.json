@@ -1,0 +1,45 @@
+{
+  "axis": "x",
+  "hero_shot": 0,
+  "limb_dominated": true,
+  "free": [
+    0.03,
+    0.05,
+    0.97,
+    0.95
+  ],
+  "crop": {
+    "canvas_px": [
+      1920,
+      1080
+    ],
+    "subject_bbox_px": [
+      150,
+      140,
+      1720,
+      900
+    ],
+    "subject_size_px": [
+      1570,
+      760
+    ]
+  },
+  "view": {
+    "orientation": "anterior-left (-X, rostrum), posterior-right (+X, caudal flukes), dorsal up, port side toward camera (+Z); close-proximity wide-angle low-elevation megalithic framing",
+    "camera_type": "hero: az -21, el -10.5, fov 45 (vertical), target (-1.15, 0.18, 0.15), d 18.6",
+    "fov_deg": 45,
+    "elevation_deg": -10,
+    "yaw_from_broadside_deg": -21
+  },
+  "palette": {
+    "background": "#EAE7E1",
+    "shell": "#D8D5CE",
+    "mechanism": "#2A2E34",
+    "warm_metal": "#B8864E",
+    "accent": "#F26419",
+    "glow": "#FF8822",
+    "light": {
+      "kelvin": 5800
+    }
+  }
+}

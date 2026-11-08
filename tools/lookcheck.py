@@ -82,10 +82,11 @@ from PIL import Image, ImageDraw, ImageFilter
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Rendered artifacts, look baselines and archived showcases live OUTSIDE the repo, so a public
-# clone never carries private output. Override with STYLEHOP_OUT (absolute path; a relative value
-# resolves against the current directory); defaults to the sibling `../out`.
-OUT_ROOT = os.path.abspath(os.environ.get('STYLEHOP_OUT') or os.path.join(REPO_ROOT, os.pardir, 'out'))
+# Rendered artifacts, look baselines and archived showcases live inside the git-ignored `./out`
+# directory (`./out/test/look/`). Override with STYLEHOP_OUT (absolute path; a relative value
+# resolves against the current directory); defaults to `<repo>/out`.
+OUT_ROOT = os.path.abspath(os.environ.get('STYLEHOP_OUT') or os.path.join(REPO_ROOT, 'out'))
+LOOK_DIR = os.path.join(OUT_ROOT, 'test', 'look')
 
 # Max drift tolerated for a change that is NOT meant to alter the look (per panel).
 GUARD = {'L': 4.0, 'contrast_pct': 20.0, 'chroma_pct': 25.0, 'dE': 6.0}
@@ -321,10 +322,10 @@ def originality_references(style, own_dir=None, is_showcase=False, extra=None):
     sheet = os.path.join(REPO_ROOT, 'styles', style, 'contact_sheet.jpg')
     if not is_showcase and os.path.exists(sheet):
         refs.append(('showcase', sheet))
-    for p in sorted(glob.glob(os.path.join(OUT_ROOT, 'look', 'archive', f'{style}_*contact_sheet*.jpg'))):
+    for p in sorted(glob.glob(os.path.join(LOOK_DIR, 'archive', f'{style}_*contact_sheet*.jpg'))):
         refs.append(('archived showcase ' + os.path.basename(p), p))
     if not is_showcase:
-        for p in sorted(glob.glob(os.path.join(OUT_ROOT, 'look', f'{style}__*', 'look_baseline.jpg'))):
+        for p in sorted(glob.glob(os.path.join(LOOK_DIR, f'{style}__*', 'look_baseline.jpg'))):
             d = os.path.dirname(p)
             if own_dir and os.path.abspath(d) == os.path.abspath(own_dir):
                 continue
@@ -679,9 +680,10 @@ def run_gates(shots_dir, ref_json, style, out_dir, strict=False):
     shots = json.load(open(os.path.join(shots_dir, 'shots.json')))
     frames = sorted(f for f in glob.glob(os.path.join(shots_dir, 'shot_*.png')) if not f.endswith('_mask.png'))
     ref = json.load(open(ref_json)) if ref_json and os.path.exists(ref_json) else None
+    has_ref_img = bool(ref and ref.get('image'))
     axis = (ref or {}).get('axis', 'y')
     ref_img = ref_mask = ref_feel = None
-    if ref:
+    if has_ref_img:
         base = os.path.dirname(ref_json)
         ref_img = Image.open(os.path.join(base, ref['image'])).convert('RGB')
         if ref.get('mask'):
@@ -699,7 +701,7 @@ def run_gates(shots_dir, ref_json, style, out_dir, strict=False):
     norm = FEEL_STYLE_NORM.get(style)
     os.makedirs(out_dir, exist_ok=True)
     results, any_warn = [], False
-    print('\n  GATES (ADR-021)  silhouette: ' + ('declared reference ' + ref['image'] if ref else 'no reference declared -> not run') +
+    print('\n  GATES (ADR-021)  silhouette: ' + ('declared reference ' + ref['image'] if has_ref_img else 'no reference declared -> not run') +
           f'   machine-feel baseline: {"reference" if ref_feel else "style norm" if norm and norm["detail"] > 0 else "none (absolute cell map only)"}')
     for i, (fp, sh) in enumerate(zip(frames, shots)):
         img = Image.open(fp).convert('RGB')
@@ -710,7 +712,7 @@ def run_gates(shots_dir, ref_json, style, out_dir, strict=False):
         if mask.sum() < 2000:
             row['warn'].append('no subject mask found')
             results.append(row); continue
-        if ref and ref.get('hero_shot') == i:
+        if has_ref_img and ref.get('hero_shot') == i:
             # ref.json `frame_clip: [a, b]` = the part (fractions of the frame mask's length) that the reference crop
             # actually shows; needed when the reference crop cuts the subject (horn tip, leg tips).
             clipped = mask
@@ -841,7 +843,7 @@ def main():
         if not o.style:
             ap.error('--gates-only needs --style (and --world for a product; without it the style default world is checked, no reference)')
         key = os.path.basename(os.path.dirname(os.path.abspath(o.world))) if o.world else f'{o.style}-default'
-        gdir = os.path.join(OUT_ROOT, 'look', f'gates__{key}')
+        gdir = os.path.join(LOOK_DIR, f'gates__{key}')
         os.makedirs(gdir, exist_ok=True)
         o.gates = True
         warn = gates_for(o, gdir)
@@ -860,14 +862,14 @@ def main():
             # so the stem made different products share one baseline (calibration-lab__world). Legacy dirs are never reused.
             wabs = os.path.abspath(o.world)
             key = os.path.basename(os.path.dirname(wabs)) or os.path.splitext(os.path.basename(wabs))[0]
-            style_dir = os.path.join(OUT_ROOT, 'look', f'{o.style}__{key}')
-            legacy = os.path.join(OUT_ROOT, 'look', f'{o.style}__{os.path.splitext(os.path.basename(wabs))[0]}')
+            style_dir = os.path.join(LOOK_DIR, f'{o.style}__{key}')
+            legacy = os.path.join(LOOK_DIR, f'{o.style}__{os.path.splitext(os.path.basename(wabs))[0]}')
             if os.path.isdir(legacy) and not os.path.isdir(style_dir):
                 print(f'  note: legacy baseline dir {os.path.relpath(legacy, REPO_ROOT)} exists (keyed by file stem, shared by every product '
                       f'called world.js); this run stores a fresh baseline in {os.path.relpath(style_dir, REPO_ROOT)}. Move the legacy dir there if it is this product\'s.')
             os.makedirs(style_dir, exist_ok=True)
             baseline = os.path.join(style_dir, 'look_baseline.jpg')
-        current = os.path.join(OUT_ROOT, 'look', f'{o.style}_{o.tag}.jpg')
+        current = os.path.join(LOOK_DIR, f'{o.style}_{o.tag}.jpg')
         os.makedirs(os.path.dirname(current), exist_ok=True)
         render_sheet(o.style, current, o.world, o.look, o.content)
         abs_fails = absolute_check(current, style=o.style)
@@ -894,7 +896,7 @@ def main():
         gates_warn = False
         if o.gates:
             gates_warn = gates_for(o, style_dir)
-        _, drift = compare(baseline, current, os.path.join(OUT_ROOT, 'look', f'{o.style}_{o.tag}_compare.jpg'))
+        _, drift = compare(baseline, current, os.path.join(LOOK_DIR, f'{o.style}_{o.tag}_compare.jpg'))
         drift = drift or []
         if orig_fails:
             sys.exit(3)

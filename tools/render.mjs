@@ -253,13 +253,13 @@ function pickRepresentativeStills(o, dur, cues) {
 }
 
 /**
- * Default output for sheets / storyboards: never a file inside the git repo. A `--world` product gets them in its own
- * directory; otherwise $STYLEHOP_OUT/look/<style>_<name> (default ../out/look/). A repo path is only written when given explicitly.
+ * Default output for sheets / storyboards: never a tracked repo file. A `--world` product gets them in its own
+ * directory; otherwise $STYLEHOP_OUT/test/look/<style>_<name> (default ./out/test/look/). A tracked path is only written when given explicitly.
  */
 export function defaultOutPath(o, name) {
   if (o.world && /\.m?js$/.test(o.world)) return path.join(path.dirname(path.resolve(o.world)), name);
-  const outRoot = path.resolve(process.env.STYLEHOP_OUT || path.join(REPO_ROOT, '..', 'out'));
-  return path.join(outRoot, 'look', `${o.style || 'page'}_${name}`);
+  const outRoot = path.resolve(process.env.STYLEHOP_OUT || path.join(REPO_ROOT, 'out'));
+  return path.join(outRoot, 'test', 'look', `${o.style || 'page'}_${name}`);
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -407,6 +407,7 @@ export async function main(argv = process.argv.slice(2)) {
           });
           if (maskUrl) fs.writeFileSync(path.join(o.shotsDir, `shot_${String(i).padStart(3, '0')}_mask.png`), Buffer.from(maskUrl.split(',')[1], 'base64'));
           // role-id pass (ADR-021 metal brightness): mean L* / frame share of role=metal|glaze|liner pixels, read by lookcheck --gates
+          await page.evaluate((s) => window.render(s), sh.t);
           sh.roles = await page.evaluate(() => (window.__stylehopStudio && window.__stylehopStudio.roleReport ? window.__stylehopStudio.roleReport() : null));
           if (sh.roles && sh.roles.metal) console.log(`    S${sh.scene + 1}.${sh.shot + 1} roles: ` + Object.entries(sh.roles).map(([k, v]) => `${k} ${(v.share * 100).toFixed(1)}% L${v.meanL.toFixed(0)}`).join('  '));
         }

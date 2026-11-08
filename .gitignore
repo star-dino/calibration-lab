@@ -27,10 +27,12 @@ Thumbs.db
 *.swo
 *~
 
-# Backstop only — nothing may ever be written inside the repo:
-# outputs live in the sibling dirs ../out and ../test (see GEMINI.md rule 0).
-/out
-/test
+# Local private docs & render outputs (never committed to public git):
+# - devdocs/: private architectural decisions, plans, output rules & reference sheets
+# - out/: local outputs split into out/test/ (tests/probes/look/scratch) & out/products/<slug>/v<N>/ (deliverables)
+/devdocs/
+/out/
+/test/
 
 # Intermediate Render & Debug Directories
 .cache/
@@ -52,6 +54,10 @@ backup_original_audio/
 !styles/**/contact_sheet.png
 !styles/**/contact_sheet.jpg
 !styles/**/look_baseline.jpg
+!styles/**/storyboard.jpg
+!styles/**/three_view_check.jpg
+!styles/**/whale/*.jpg
+!styles/**/whale/img/*.jpg
 !styles/*/lineage/**/img/*.jpg
 !assets/textures/*.png
 *.log

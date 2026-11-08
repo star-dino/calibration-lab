@@ -200,7 +200,6 @@ export const LOOK = (() => {
   k = String(k).toLowerCase();
   return (k || 'focus');
 })();
-// 'focus' (default): read + 大疏大密: clasps only on the seams at the window (the outer seams get theirs from
-// the camera distance), darker wider outer seams, pure orange core, hero 10% closer.
+// 'focus' (default): read + 大疏大密: darker wider outer seams (with a fine steel liner rising at close camera distance), pure orange core, hero 10% closer.
 export const FOCUS = LOOK === 'focus';
 export const READ = LOOK === 'read' || FOCUS;
