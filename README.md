@@ -8,6 +8,34 @@
 
 默认样片《机械鹦鹉螺》共 5 个场景、26 秒，由 `styles/calibration-lab/world.js` + `sample/` 组成；同时仓库内置第二套完整重工旗舰样片《深海声学须鲸 Balaenoptera AQ-12》（[`styles/calibration-lab/whale/`](styles/calibration-lab/whale/README.md)，共 5 个场景、7 个镜头、26 秒，支持 `minimal` 标准档与 `kinetic` V10 复杂重工满舱档 `5,632` 内舱零件一键切换）。
 
+---
+
+## 旗舰复杂样片展示 · 深海声学须鲸（Balaenoptera AQ-12 · V10）
+
+> 完整文档与 V1–V10 工程复盘见 [`styles/calibration-lab/whale/README.md`](styles/calibration-lab/whale/README.md) · [`NOTES.md`](styles/calibration-lab/whale/NOTES.md) · [`lineage/mech-whale/`](styles/calibration-lab/lineage/mech-whale/README.md)
+
+![Balaenoptera AQ-12 V10 2×2 检视表](styles/calibration-lab/whale/contact_sheet.jpg)
+
+### 双复杂度档位对比：标准档（`minimal` / V7）vs. 复杂重工满舱档（`kinetic` / V10）
+
+| 标准档（`minimal` · V7 基线 · 184 件 6 层模块化拆解） | 复杂重工满舱档（`kinetic` · V10 默认 · 5,632 件三层内构） |
+| :-: | :-: |
+| ![V7 标准档检视表](styles/calibration-lab/whale/contact_sheet_v7_standard.jpg) | ![V10 复杂档检视表](styles/calibration-lab/whale/contact_sheet.jpg) |
+
+### 7 镜头分镜与关键帧（26.0s · 5 Scenes / 7 Shots）
+
+![Balaenoptera AQ-12 7 镜头分镜表](styles/calibration-lab/whale/storyboard.jpg)
+
+| S1.1 · `CRUISE`（巡航入场） | S2.1 · `OPTICS OPEN`（头锥与 28 片机械鲸须百叶） |
+| :-: | :-: |
+| ![S1.1 CRUISE](styles/calibration-lab/whale/img/shot_000.jpg) | ![S2.1 OPTICS OPEN](styles/calibration-lab/whale/img/shot_001.jpg) |
+| **S3.1 · `HYDROFOIL OFF`（22 件水翼与行星减速机匣）** | **S4.1 · `STATOR OPEN`（MHD 紫铜定子与汇流母线排）** |
+| ![S3.1 HYDROFOIL OFF](styles/calibration-lab/whale/img/shot_002.jpg) | ![S4.1 STATOR OPEN](styles/calibration-lab/whale/img/shot_003.jpg) |
+| **S4.2 · `TAIL FANNED`（十字万向尾椎与 12 件扇展尾翼）** | **S5.1 · `TEARDOWN`（全舰 5,632 件大爆炸转台检视）** |
+| ![S4.2 TAIL FANNED](styles/calibration-lab/whale/img/shot_004.jpg) | ![S5.1 TEARDOWN](styles/calibration-lab/whale/img/shot_005.jpg) |
+
+---
+
 ## 它是什么
 
 - **kernel（工具箱）**：`styles/calibration-lab/kernel.js` 提供机器感原语——世界空间剖切（`cutWindow` / `windowRim`）、刻线台面、环组/散热鳍/联动机构（四连杆、行星差速轮系、同步光圈、正交十字万向节）、材质角色（metal / glaze / liner / emissive）、分阶段爆炸、LOD 与同源仪表 HUD。每个元素都必须带参数，没有默认摆放。

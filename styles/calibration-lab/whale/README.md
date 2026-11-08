@@ -84,36 +84,36 @@ node tools/audit.mjs --style calibration-lab \
 node tools/render.mjs --style calibration-lab \
   --world styles/calibration-lab/whale/world.js \
   --content styles/calibration-lab/whale/scenes.html \
-  --sheet ../out/scratch/whale/contact_sheet.jpg \
-  --storyboard ../out/scratch/whale/storyboard.jpg \
-  --shots-dir ../out/scratch/whale/gate_shots
+  --sheet out/test/scratch/whale/contact_sheet.jpg \
+  --storyboard out/test/scratch/whale/storyboard.jpg \
+  --shots-dir out/test/scratch/whale/gate_shots
 
 # 3. 切换为 V7 标准档（minimal）渲染检视表
 node tools/render.mjs --style calibration-lab \
   --world styles/calibration-lab/whale/world.js \
   --content styles/calibration-lab/whale/scenes.html \
   --look '{"mech":"minimal"}' \
-  --sheet ../out/scratch/whale/contact_sheet_minimal.jpg
+  --sheet out/test/scratch/whale/contact_sheet_minimal.jpg
 
 # 4. 渲染三视图工程校验图
 node tools/render.mjs --style calibration-lab \
   --world styles/calibration-lab/whale/world.js \
   --content styles/calibration-lab/whale/scenes.html \
   --look '{"threeView":true}' \
-  --sheet ../out/scratch/whale/three_view_check.jpg
+  --sheet out/test/scratch/whale/three_view_check.jpg
 
 # 5. 运行 ADR-021 3D 视觉门禁（剪影 / 机器感 / 金属明度 / 颜色层）
 python3 tools/lookcheck.py --style calibration-lab \
   --world styles/calibration-lab/whale/world.js \
   --content styles/calibration-lab/whale/scenes.html \
-  --shots-dir ../out/scratch/whale/gate_shots \
+  --shots-dir out/test/scratch/whale/gate_shots \
   --gates --strict-gates
 
 # 6. 渲染 1080p 30fps 完整成片（含程序化水下重工机械配乐）
 node tools/render.mjs --style calibration-lab \
   --world styles/calibration-lab/whale/world.js \
   --content styles/calibration-lab/whale/scenes.html \
-  --video ../out/scratch/whale/mech_whale_showreel.mp4 --fps 30 --workers 2
+  --video out/products/mech-whale/v10/mech_whale_showreel.mp4 --fps 30 --workers 2
 ```
 
 ---
