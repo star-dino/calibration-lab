@@ -44,6 +44,7 @@
   - [`styles/calibration-lab/whale/`](styles/calibration-lab/whale/README.md)：重工多级拆解样片《深海声学须鲸 Balaenoptera AQ-12》，展示 `resolveMechProfile` 双档参数化体系（`minimal` 标准档 vs `kinetic` 复杂档 `5,632` 件三层内构）。
 - **规格**：`styles/calibration-lab/SPEC.md`（去固化铁律、API、剖切/爆炸/仪表规则、§9 自检清单与 3D 门禁）。
 - **来历**：`styles/calibration-lab/lineage/mech-nautilus/` 保留机械鹦鹉螺从早期 → 重做 → 迭代的过程图与说明；[`styles/calibration-lab/lineage/mech-whale/`](styles/calibration-lab/lineage/mech-whale/README.md) 记录深海声学须鲸从 `V1`–`V10` 的演进脉络与双复杂度分档决策。
+- **AI 协作与技能卡**：[`agent.md`](agent.md)（AI Agent 完整协作指南、双复杂度档位规范、6 步创作流与工程红线）与 [`skill/SKILL.md`](skill/SKILL.md)（可直接挂载至 Claude Code / Gemini / Antigravity / Cursor 的标准技能卡）。
 - **声音**：`tools/sound.py` 的 `mech` 预设——液压泵/流体床、循环动力冲程、伺服/气阀过渡与机械拟音；无音乐铺底、无高频铃声。`styles/calibration-lab/samples.json` 可把 `brass_ratchet` / `count_tick` / `scale_tilt` / `card_enter` / `layer_float` 叠到 CC0 录音 one-shot 上；缓存缺失时自动纯合成。
 
 ## 快速开始
@@ -87,6 +88,8 @@ node tools/render.mjs --style calibration-lab --video <out>.mp4 --voice <dir>/vo
 ## 目录
 
 ```text
+agent.md    AI Agent 协作与工程指南（模块地图、双复杂度档位规范、6 步创作工作流、红线与命令速查）
+skill/      AI 技能卡目录（SKILL.md + README.md，可挂载至 Claude / Gemini / Cursor）
 engine/     运行时：stage.js · motion.js · studio3d.js · camera.js · director.js · look.js · gtao.js · three_bridge.js · vendor/three.min.js · passes/grain.js · base.css …（见 engine/README.md）
 gallery/    Studio（index.html + player.html + catalog.js，只列 calibration-lab）
 styles/calibration-lab/
